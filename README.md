@@ -7,7 +7,9 @@
 
 This project provides a [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol/specification) server designed specifically for interacting with **self-hosted Supabase instances**. It bridges the gap between MCP clients (like IDE extensions) and your local or privately hosted Supabase projects, enabling database introspection, management, and interaction directly from your development environment.
 
-This server was built from scratch, drawing lessons from adapting the official Supabase cloud MCP server, to provide a minimal, focused implementation tailored for the self-hosted use case.
+The server supports two transport modes:
+- **Stdio** (default): Traditional MCP stdio transport for IDE integrations
+- **HTTP/SSE**: Stateful HTTP server with Supabase JWT authentication for web clients and persistent connections
 
 ## Purpose
 
@@ -24,7 +26,7 @@ It avoids the complexities of the official cloud server related to multi-project
 
 ## Features (Implemented Tools)
 
-The server exposes **53 tools** to MCP clients, organized into the following categories:
+The server exposes **46 tools** to MCP clients, organized into the following categories:
 
 ### Schema & Migrations
 *   `list_tables`: Lists tables in the database schemas.
@@ -64,7 +66,7 @@ The server exposes **53 tools** to MCP clients, organized into the following cat
 
 ### Project Configuration & Keys
 *   `get_project_url`: Returns the configured Supabase URL.
-*   `get_anon_key`: Returns the configured Supabase anon key.
+*   `get_anon_key`: Returns the configured Supabase anon key (masked by default).
 *   `get_service_key`: Returns the configured Supabase service role key (if provided).
 *   `verify_jwt_secret`: Checks if the JWT secret is configured and returns a preview.
 
@@ -76,19 +78,20 @@ The server exposes **53 tools** to MCP clients, organized into the following cat
 *   `disable_extension`: Disables (uninstalls) a PostgreSQL extension.
 
 ### Auth User Management
-*   `list_auth_users`: Lists users from `auth.users`.
-*   `get_auth_user`: Retrieves details for a specific user.
-*   `create_auth_user`: Creates a new user (Requires direct DB access).
-*   `delete_auth_user`: Deletes or disables a user (Requires direct DB access).
-*   `update_auth_user`: Updates user details (Requires direct DB access).
+*   `user_admin`: Consolidated tool for managing users in `auth.users`. Operations:
+    - `list`: List users with pagination
+    - `get`: Get a specific user by ID
+    - `create`: Create a new user with email/password
+    - `update`: Update user fields (email, password, role, metadata)
+    - `delete`: Delete or disable a user (with confirmation)
 
 ### Auth Session Management
-*   `list_auth_sessions`: Lists active authentication sessions.
-*   `revoke_session`: Revokes (deletes) an authentication session.
+*   `list_auth_sessions`: Lists active authentication sessions. In HTTP mode, users can only see their own sessions (RLS enforced).
+*   `revoke_session`: Revokes (deletes) an authentication session. In HTTP mode, users can only revoke their own sessions (RLS enforced).
+
+### Auth Flow
 *   `signin_with_password`: Sign in a user with email/password and get JWT tokens.
 *   `signup_user`: Register a new user and optionally return session tokens.
-*   `refresh_session`: Refresh an expired access token using a refresh token.
-*   `get_current_session`: Validate and decode a JWT access token.
 *   `signout_user`: Sign out a user and invalidate their sessions.
 *   `generate_user_token`: **[Admin/Sudo]** Generate a JWT token for any user without their password.
 
@@ -102,7 +105,42 @@ The server exposes **53 tools** to MCP clients, organized into the following cat
 ### Realtime Inspection
 *   `list_realtime_publications`: Lists PostgreSQL publications (often `supabase_realtime`).
 
-*(Note: `get_logs` was initially planned but skipped due to implementation complexities in a self-hosted environment).*
+## Transport Modes
+
+### Stdio Mode (Default)
+
+Traditional MCP transport for IDE integrations. The server communicates via standard input/output.
+
+```bash
+node dist/index.js --url http://localhost:8000 --anon-key <key>
+```
+
+### HTTP Mode
+
+Stateful HTTP/SSE server with Supabase JWT authentication. Clients authenticate by passing their Supabase JWT in the `Authorization` header.
+
+```bash
+node dist/index.js \
+  --transport http \
+  --port 3100 \
+  --url http://localhost:8000 \
+  --anon-key <anon-key> \
+  --service-key <service-key> \
+  --jwt-secret <jwt-secret>
+```
+
+**HTTP Mode Features:**
+- Persistent connections via Server-Sent Events (SSE)
+- JWT authentication - clients pass `Authorization: Bearer <token>`
+- Automatic token validation and refresh
+- RLS enforcement - session tools restrict users to their own data
+- Health check endpoint at `GET /health`
+
+**HTTP Endpoints:**
+- `POST /mcp` - Initialize MCP session
+- `GET /mcp` - SSE stream for server-to-client messages
+- `DELETE /mcp` - Close session
+- `GET /health` - Health check
 
 ## Security Profiles
 
@@ -110,31 +148,33 @@ The server supports four security profiles that control which tools are availabl
 
 | Profile | Tools | Description |
 |---------|-------|-------------|
-| **readonly** | 28 | Read-only access. Can query and inspect but cannot make any changes. |
-| **standard** | 35 | Standard operations. Includes readonly plus user creation/update, session management, and auth operations. |
-| **admin** | 53 | Full administrative access. All tools enabled including destructive operations and sudo capabilities. |
+| **readonly** | 25 | Read-only access. Can query and inspect but cannot make any changes. |
+| **standard** | 30 | Standard operations. Includes readonly plus user management and auth operations. |
+| **admin** | 46 | Full administrative access. All tools enabled including destructive operations. |
 | **custom** | Variable | User-defined tool list via `--tools-config` JSON file. |
 
 ### Profile Tool Breakdown
 
 **Readonly profile includes:**
 - All list/get operations (tables, indexes, functions, triggers, RLS policies, etc.)
-- Query execution (read-only)
+- Query execution (read-only via safety flags)
 - Query plan analysis (EXPLAIN)
-- Token validation (`get_current_session`)
+- Storage bucket/object listing
+- Realtime publication listing
 
 **Standard profile adds:**
-- `create_auth_user`, `update_auth_user`
+- `user_admin` (list, get, create, update, delete operations)
 - `list_auth_sessions`
-- Auth session operations (`signin_with_password`, `signup_user`, `refresh_session`, `signout_user`)
+- Auth flow operations (`signin_with_password`, `signup_user`, `signout_user`)
 
 **Admin profile adds:**
 - Credential access (`get_service_key`)
-- Destructive operations (`delete_auth_user`, `revoke_session`, `delete_storage_*`)
+- Sudo capability (`generate_user_token` - generate JWT for any user)
+- Session management (`revoke_session`)
 - DDL operations (`apply_migration`, `create_index`, `drop_index`, `enable_extension`, `disable_extension`)
 - RLS management (`enable_rls_on_table`, `create_rls_policy`, `drop_rls_policy`)
-- Storage management (`create_storage_bucket`, `delete_storage_bucket`)
-- Sudo capability (`generate_user_token` - generate JWT for any user)
+- Storage management (`create_storage_bucket`, `delete_storage_bucket`, `delete_storage_object`)
+- Development tools (`generate_typescript_types`, `rebuild_hooks`)
 
 See [SECURITY.md](./SECURITY.md) for detailed information about security considerations.
 
@@ -175,59 +215,80 @@ npx -y @smithery/cli install @HenkDz/selfhosted-supabase-mcp --client claude
 
 The server requires configuration details for your Supabase instance. These can be provided via command-line arguments or environment variables. CLI arguments take precedence.
 
-**Required:**
+### Transport Options
+
+*   `--transport <mode>`: Transport mode - `stdio` (default) or `http`.
+*   `--port <number>`: Port for HTTP server (default: 3100). Only used with `--transport http`.
+*   `--host <address>`: Host address for HTTP server (default: `localhost`). Only used with `--transport http`.
+
+### Required
 
 *   `--url <url>` or `SUPABASE_URL=<url>`: The main HTTP URL of your Supabase project (e.g., `http://localhost:8000`).
 *   `--anon-key <key>` or `SUPABASE_ANON_KEY=<key>`: Your Supabase project's anonymous key.
 
-**Optional (but Recommended/Required for certain tools):**
+### Optional (but Recommended/Required for certain tools)
 
-*   `--service-key <key>` or `SUPABASE_SERVICE_ROLE_KEY=<key>`: Your Supabase project's service role key. Needed for operations requiring elevated privileges, like attempting to automatically create the `execute_sql` helper function if it doesn't exist.
-*   `--db-url <url>` or `DATABASE_URL=<url>`: The direct PostgreSQL connection string for your Supabase database (e.g., `postgresql://postgres:password@localhost:5432/postgres`). Required for tools needing direct database access or transactions (`apply_migration`, Auth tools, Storage tools, querying `pg_catalog`, etc.).
-*   `--jwt-secret <secret>` or `SUPABASE_AUTH_JWT_SECRET=<secret>`: Your Supabase project's JWT secret. Needed for tools like `verify_jwt_secret`.
-*   `--security-profile <profile>`: Security profile controlling which tools are enabled. Options: `readonly`, `standard`, `admin` (default), `custom`. See [SECURITY.md](./SECURITY.md) for details.
-*   `--tools-config <path>`: Path to a JSON file specifying which tools to enable. Required when using `--security-profile custom`. The file should have the format `{"enabledTools": ["tool_name_1", "tool_name_2"]}`.
+*   `--service-key <key>` or `SUPABASE_SERVICE_ROLE_KEY=<key>`: Your Supabase project's service role key. Needed for operations requiring elevated privileges.
+*   `--db-url <url>` or `DATABASE_URL=<url>`: The direct PostgreSQL connection string for your Supabase database (e.g., `postgresql://postgres:password@localhost:5432/postgres`). Required for tools needing direct database access.
+*   `--jwt-secret <secret>` or `SUPABASE_AUTH_JWT_SECRET=<secret>`: Your Supabase project's JWT secret. **Required for HTTP mode** to validate client tokens.
+*   `--security-profile <profile>`: Security profile controlling which tools are enabled. Options: `readonly`, `standard`, `admin` (default), `custom`.
+*   `--tools-config <path>`: Path to a JSON file specifying which tools to enable. Required when using `--security-profile custom`. Format: `{"enabledTools": ["tool_name_1", "tool_name_2"]}`.
 *   `--audit-log <path>`: Path to write audit logs (in addition to stderr).
 *   `--no-audit`: Disable audit logging.
 
 ### Important Notes:
 
-*   **`execute_sql` Helper Function:** Many tools rely on a `public.execute_sql` function within your Supabase database for secure and efficient SQL execution via RPC. The server attempts to check for this function on startup. If it's missing *and* a `service-key` (or `SUPABASE_SERVICE_ROLE_KEY`) *and* `db-url` (or `DATABASE_URL`) are provided, it will attempt to create the function and grant necessary permissions. If creation fails or keys aren't provided, tools relying solely on RPC may fail.
-*   **Direct Database Access:** Tools interacting directly with privileged schemas (`auth`, `storage`) or system catalogs (`pg_catalog`) generally require the `DATABASE_URL` to be configured for a direct `pg` connection.
+*   **`execute_sql` Helper Function:** Many tools rely on a `public.execute_sql` function within your Supabase database for secure and efficient SQL execution via RPC. The server attempts to check for this function on startup. If it's missing *and* a `service-key` *and* `db-url` are provided, it will attempt to create the function.
+*   **Direct Database Access:** Tools interacting directly with privileged schemas (`auth`, `storage`) or system catalogs (`pg_catalog`) require the `DATABASE_URL` to be configured.
+*   **HTTP Mode Requirements:** When using `--transport http`, the `--jwt-secret` is required to validate client JWT tokens.
 
 ## Usage
 
-Run the server using Node.js, providing the necessary configuration:
+### Stdio Mode (IDE Integration)
 
 ```bash
-# Using CLI arguments (example)
-node dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --db-url postgresql://postgres:password@localhost:5432/postgres [--service-key <your-service-key>]
+# Using CLI arguments
+node dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --db-url postgresql://postgres:password@localhost:5432/postgres
 
-# Example with tool whitelisting via config file
-node dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --tools-config ./mcp-tools.json
-
-# Or configure using environment variables and run:
-# export SUPABASE_URL=http://localhost:8000
-# export SUPABASE_ANON_KEY=<your-anon-key>
-# export DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
-# export SUPABASE_SERVICE_ROLE_KEY=<your-service-key>
-# The --tools-config option MUST be passed as a CLI argument if used
+# Using environment variables
+export SUPABASE_URL=http://localhost:8000
+export SUPABASE_ANON_KEY=<your-anon-key>
+export DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
 node dist/index.js
-
-# Using npm start script (if configured in package.json to pass args/read env)
-npm start -- --url ... --anon-key ...
 ```
 
-The server communicates via standard input/output (stdio) and is designed to be invoked by an MCP client application (e.g., an IDE extension like Cursor). The client will connect to the server's stdio stream to list and call the available tools.
+### HTTP Mode (Web Clients)
+
+```bash
+# Start HTTP server
+node dist/index.js \
+  --transport http \
+  --port 3100 \
+  --url http://localhost:8000 \
+  --anon-key <anon-key> \
+  --service-key <service-key> \
+  --db-url postgresql://postgres:password@localhost:5432/postgres \
+  --jwt-secret <jwt-secret>
+```
+
+Clients connect with their Supabase JWT:
+```bash
+# Initialize session
+curl -X POST http://localhost:3100/mcp \
+  -H "Authorization: Bearer <supabase-jwt>" \
+  -H "Content-Type: application/json"
+
+# Health check
+curl http://localhost:3100/health
+```
 
 ## Client Configuration Examples
 
-Below are examples of how to configure popular MCP clients to use this self-hosted server. 
+Below are examples of how to configure popular MCP clients to use this self-hosted server.
 
-**Important:** 
-*   Replace placeholders like `<your-supabase-url>`, `<your-anon-key>`, `<your-db-url>`, `<path-to-dist/index.js>` etc., with your actual values.
+**Important:**
+*   Replace placeholders like `<your-supabase-url>`, `<your-anon-key>`, etc., with your actual values.
 *   Ensure the path to the compiled server file (`dist/index.js`) is correct for your system.
-*   Be cautious about storing sensitive keys directly in configuration files, especially if committed to version control. Consider using environment variables or more secure methods where supported by the client.
 
 ### Cursor
 
@@ -237,24 +298,15 @@ Below are examples of how to configure popular MCP clients to use this self-host
     ```json
     {
       "mcpServers": {
-        "selfhosted-supabase": { 
+        "selfhosted-supabase": {
           "command": "node",
           "args": [
-            "<path-to-dist/index.js>", // e.g., "F:/Projects/mcp-servers/self-hosted-supabase-mcp/dist/index.js"
-            "--url",
-            "<your-supabase-url>", // e.g., "http://localhost:8000"
-            "--anon-key",
-            "<your-anon-key>",
-            // Optional - Add these if needed by the tools you use
-            "--service-key",
-            "<your-service-key>",
-            "--db-url",
-            "<your-db-url>", // e.g., "postgresql://postgres:password@host:port/postgres"
-            "--jwt-secret",
-            "<your-jwt-secret>",
-            // Optional - Whitelist specific tools
-            "--tools-config",
-            "<path-to-your-mcp-tools.json>" // e.g., "./mcp-tools.json"
+            "<path-to-dist/index.js>",
+            "--url", "<your-supabase-url>",
+            "--anon-key", "<your-anon-key>",
+            "--service-key", "<your-service-key>",
+            "--db-url", "<your-db-url>",
+            "--jwt-secret", "<your-jwt-secret>"
           ]
         }
       }
@@ -262,8 +314,6 @@ Below are examples of how to configure popular MCP clients to use this self-host
     ```
 
 ### Visual Studio Code (Copilot)
-
-VS Code Copilot allows using environment variables populated via prompted inputs, which is more secure for keys.
 
 1.  Create or open the file `.vscode/mcp.json` in your project root.
 2.  Add the following configuration:
@@ -273,73 +323,58 @@ VS Code Copilot allows using environment variables populated via prompted inputs
       "inputs": [
         { "type": "promptString", "id": "sh-supabase-url", "description": "Self-Hosted Supabase URL", "default": "http://localhost:8000" },
         { "type": "promptString", "id": "sh-supabase-anon-key", "description": "Self-Hosted Supabase Anon Key", "password": true },
-        { "type": "promptString", "id": "sh-supabase-service-key", "description": "Self-Hosted Supabase Service Key (Optional)", "password": true, "required": false },
-        { "type": "promptString", "id": "sh-supabase-db-url", "description": "Self-Hosted Supabase DB URL (Optional)", "password": true, "required": false },
-        { "type": "promptString", "id": "sh-supabase-jwt-secret", "description": "Self-Hosted Supabase JWT Secret (Optional)", "password": true, "required": false },
-        { "type": "promptString", "id": "sh-supabase-server-path", "description": "Path to self-hosted-supabase-mcp/dist/index.js" },
-        { "type": "promptString", "id": "sh-supabase-tools-config", "description": "Path to tools config JSON (Optional, e.g., ./mcp-tools.json)", "required": false }
+        { "type": "promptString", "id": "sh-supabase-service-key", "description": "Self-Hosted Supabase Service Key", "password": true },
+        { "type": "promptString", "id": "sh-supabase-db-url", "description": "Self-Hosted Supabase DB URL", "password": true },
+        { "type": "promptString", "id": "sh-supabase-jwt-secret", "description": "Self-Hosted Supabase JWT Secret", "password": true },
+        { "type": "promptString", "id": "sh-supabase-server-path", "description": "Path to self-hosted-supabase-mcp/dist/index.js" }
       ],
       "servers": {
         "selfhosted-supabase": {
           "command": "node",
-          // Arguments are passed via environment variables set below OR direct args for non-env options
-          "args": [
-            "${input:sh-supabase-server-path}",
-            // Use direct args for options not easily map-able to standard env vars like tools-config
-            // Check if tools-config input is provided before adding the argument
-            ["--tools-config", "${input:sh-supabase-tools-config}"] 
-            // Alternatively, pass all as args if simpler:
-            // "--url", "${input:sh-supabase-url}",
-            // "--anon-key", "${input:sh-supabase-anon-key}",
-            // ... etc ... 
-           ],
+          "args": ["${input:sh-supabase-server-path}"],
           "env": {
             "SUPABASE_URL": "${input:sh-supabase-url}",
             "SUPABASE_ANON_KEY": "${input:sh-supabase-anon-key}",
             "SUPABASE_SERVICE_ROLE_KEY": "${input:sh-supabase-service-key}",
             "DATABASE_URL": "${input:sh-supabase-db-url}",
             "SUPABASE_AUTH_JWT_SECRET": "${input:sh-supabase-jwt-secret}"
-            // The server reads these environment variables as fallbacks if CLI args are missing
           }
         }
       }
     }
     ```
-3.  When you use Copilot Chat in Agent mode (@workspace), it should detect the server. You will be prompted to enter the details (URL, keys, path) when the server is first invoked.
 
 ### Other Clients (Windsurf, Cline, Claude)
 
-Adapt the configuration structure shown for Cursor or the official Supabase documentation, replacing the `command` and `args` with the `node` command and the arguments for this server, similar to the Cursor example:
+Adapt the configuration structure shown for Cursor, replacing the `command` and `args` with the `node` command and arguments:
 
 ```json
 {
   "mcpServers": {
-    "selfhosted-supabase": { 
+    "selfhosted-supabase": {
       "command": "node",
       "args": [
-        "<path-to-dist/index.js>", 
-        "--url", "<your-supabase-url>", 
-        "--anon-key", "<your-anon-key>", 
-        // Optional args...
-        "--service-key", "<your-service-key>", 
-        "--db-url", "<your-db-url>", 
-        "--jwt-secret", "<your-jwt-secret>",
-        // Optional tools config
-        "--tools-config", "<path-to-your-mcp-tools.json>"
+        "<path-to-dist/index.js>",
+        "--url", "<your-supabase-url>",
+        "--anon-key", "<your-anon-key>",
+        "--service-key", "<your-service-key>",
+        "--db-url", "<your-db-url>",
+        "--jwt-secret", "<your-jwt-secret>"
       ]
     }
   }
 }
 ```
-Consult the specific documentation for each client on where to place the `mcp.json` or equivalent configuration file.
+
+Consult the specific documentation for each client on where to place the configuration file.
 
 ## Development
 
 *   **Language:** TypeScript
-*   **Build:** `tsc` (TypeScript Compiler)
+*   **Build:** `tsup` (bundler)
 *   **Dependencies:** Managed via `npm` (`package.json`)
-*   **Core Libraries:** `@supabase/supabase-js`, `pg` (node-postgres), `zod` (validation), `commander` (CLI args), `@modelcontextprotocol/sdk` (MCP server framework).
+*   **Core Libraries:** `@supabase/supabase-js`, `pg` (node-postgres), `zod` (validation), `commander` (CLI args), `@modelcontextprotocol/sdk` (MCP server framework), `jsonwebtoken` (JWT validation), `express` (HTTP server).
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details. 
+This project is licensed under the MIT License. See the LICENSE file for details.

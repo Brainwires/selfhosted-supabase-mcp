@@ -50,17 +50,29 @@ const mcpInputSchema = {
 
 export const listAuthSessionsTool = {
     name: 'list_auth_sessions',
-    description: 'Lists active authentication sessions. Can filter by user ID.',
+    description: 'Lists active authentication sessions. When using HTTP transport, users can only see their own sessions (RLS enforced). The user_id filter is ignored in HTTP mode.',
     inputSchema: ListAuthSessionsInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: ListAuthSessionsOutputSchema,
 
     execute: async (input: ListAuthSessionsInput, context: ToolContext) => {
         const client = context.selfhostedClient;
-        const { user_id, limit, offset } = input;
+        const { limit, offset } = input;
+        let { user_id } = input;
 
         if (!client.isPgAvailable()) {
             throw new Error('Direct database connection (DATABASE_URL) is required for accessing auth sessions but is not configured or available.');
+        }
+
+        // RLS enforcement: In HTTP mode, users can only see their own sessions
+        if (context.authContext) {
+            const currentUserId = context.authContext.userId;
+
+            // Force user_id to current user (ignore any provided value)
+            if (user_id && user_id !== currentUserId) {
+                context.log(`RLS: Ignoring user_id filter '${user_id}', restricting to current user '${currentUserId}'`, 'warn');
+            }
+            user_id = currentUserId;
         }
 
         try {

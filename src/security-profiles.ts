@@ -26,12 +26,10 @@ const READONLY_TOOLS = [
     'get_project_url',
     'get_anon_key', // Masked by default
     'verify_jwt_secret',
-    'list_auth_users',
-    'get_auth_user',
     'list_storage_buckets',
     'list_storage_objects',
     'list_realtime_publications',
-    // New read-only tools
+    // Schema inspection tools
     'list_rls_policies',
     'get_rls_status',
     'list_database_functions',
@@ -45,31 +43,29 @@ const READONLY_TOOLS = [
     'list_foreign_keys',
     'list_constraints',
     'list_available_extensions',
-    // Auth session inspection (read-only)
-    'get_current_session',
 ];
 
 /**
  * Standard profile - Common operations without dangerous capabilities
+ * Includes auth user management and session tools.
  */
 const STANDARD_TOOLS = [
     ...READONLY_TOOLS,
-    'create_auth_user',
-    'update_auth_user',
-    // New standard tools (read sessions)
+    // Auth user admin (list, get, create, update, delete via operation param)
+    'user_admin',
+    // Auth session tools (RLS enforced in HTTP mode)
     'list_auth_sessions',
-    // Auth session operations (non-destructive)
+    // Auth flow tools
     'signin_with_password',
     'signup_user',
-    'refresh_session',
     'signout_user',
     // Notably excludes:
     // - get_service_key (exposes sensitive credentials)
-    // - delete_auth_user (destructive)
     // - apply_migration (DDL changes)
     // - generate_typescript_types (external CLI execution)
     // - rebuild_hooks (system modification)
     // - revoke_session (session termination)
+    // - generate_user_token (sudo capability)
     // - enable/disable_extension (DDL)
     // - create/drop_index (DDL)
     // - enable_rls_on_table, create/drop_rls_policy (DDL)
@@ -78,28 +74,30 @@ const STANDARD_TOOLS = [
 
 /**
  * Admin profile - Full access to all tools
+ * Includes destructive operations and sudo capabilities.
  */
 const ADMIN_TOOLS = [
     ...STANDARD_TOOLS,
     'get_service_key',
-    'delete_auth_user',
+    'generate_user_token', // Sudo capability for impersonation
     'apply_migration',
     'generate_typescript_types',
     'rebuild_hooks',
-    // New admin tools (mutating/DDL operations)
+    // DDL operations
     'enable_rls_on_table',
     'create_rls_policy',
     'drop_rls_policy',
     'create_index',
     'drop_index',
+    // Session management (RLS enforced in HTTP mode)
     'revoke_session',
+    // Storage operations
     'create_storage_bucket',
     'delete_storage_bucket',
     'delete_storage_object',
+    // Extension management
     'enable_extension',
     'disable_extension',
-    // Sudo capability (generates tokens for any user)
-    'generate_user_token',
 ];
 
 /**

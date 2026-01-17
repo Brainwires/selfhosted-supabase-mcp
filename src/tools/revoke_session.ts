@@ -44,7 +44,7 @@ const mcpInputSchema = {
 
 export const revokeSessionTool = {
     name: 'revoke_session',
-    description: 'Revokes (deletes) an authentication session, effectively logging out that session. Requires confirm=true to execute.',
+    description: 'Revokes (deletes) an authentication session, effectively logging out that session. When using HTTP transport, users can only revoke their own sessions (RLS enforced). Requires confirm=true to execute.',
     inputSchema: RevokeSessionInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: RevokeSessionOutputSchema,
@@ -83,6 +83,15 @@ export const revokeSessionTool = {
                     message: `Session with ID ${session_id} not found.`,
                     action: 'not_found' as const,
                 };
+            }
+
+            // RLS enforcement: In HTTP mode, users can only revoke their own sessions
+            if (context.authContext) {
+                const currentUserId = context.authContext.userId;
+                if (sessionDetails.user_id !== currentUserId) {
+                    context.log(`RLS: User '${currentUserId}' attempted to revoke session belonging to '${sessionDetails.user_id}'`, 'warn');
+                    throw new Error('Cannot revoke sessions belonging to other users.');
+                }
             }
 
             // If not confirmed, return preview
