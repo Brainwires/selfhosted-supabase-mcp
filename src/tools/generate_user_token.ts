@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 import type { PoolClient } from 'pg';
 
 // Input schema
@@ -70,45 +69,38 @@ export const generateUserTokenTool = {
             };
         }
 
-        // For full session mode, we need database access
-        if (create_session && !client.isPgAvailable()) {
+        // This tool requires database access for user lookup
+        if (!client.isPgAvailable()) {
             return {
                 success: false,
-                error: 'Database URL is required for create_session=true mode. Please provide --db-url or DATABASE_URL environment variable.',
+                error: 'Database URL is required for generate_user_token. Please provide --db-url or DATABASE_URL environment variable.',
             };
         }
 
         try {
-            // Fetch user details
-            const userResult = await executeSqlWithFallback(client, `
-                SELECT id, email, role, raw_app_meta_data, raw_user_meta_data
-                FROM auth.users
-                WHERE id = '${user_id.replace(/'/g, "''")}'
-            `, true);
+            // Fetch user details using parameterized query to prevent SQL injection
+            const user = await client.executeTransactionWithPg(async (pgClient: PoolClient) => {
+                const result = await pgClient.query<{
+                    id: string;
+                    email: string | null;
+                    role: string | null;
+                    raw_app_meta_data: Record<string, unknown> | null;
+                    raw_user_meta_data: Record<string, unknown> | null;
+                }>(`
+                    SELECT id, email, role, raw_app_meta_data, raw_user_meta_data
+                    FROM auth.users
+                    WHERE id = $1
+                `, [user_id]);
 
-            if (isSqlErrorResponse(userResult)) {
-                return {
-                    success: false,
-                    error: `Failed to fetch user: ${userResult.error.message}`,
-                };
-            }
+                return result.rows[0] || null;
+            });
 
-            const users = userResult as Array<{
-                id: string;
-                email: string | null;
-                role: string | null;
-                raw_app_meta_data: Record<string, unknown> | null;
-                raw_user_meta_data: Record<string, unknown> | null;
-            }>;
-
-            if (users.length === 0) {
+            if (!user) {
                 return {
                     success: false,
                     error: `User with ID ${user_id} not found.`,
                 };
             }
-
-            const user = users[0];
             const now = Math.floor(Date.now() / 1000);
             const expiresAt = now + expires_in;
 

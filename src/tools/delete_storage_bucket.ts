@@ -61,6 +61,17 @@ export const deleteStorageBucketTool = {
             throw new Error('Direct database connection (DATABASE_URL) is required for deleting storage buckets but is not configured or available.');
         }
 
+        // In HTTP mode, restrict destructive storage operations to service_role
+        // Regular authenticated users should not be able to delete buckets
+        if (context.authContext) {
+            const role = context.authContext.role;
+            if (role !== 'service_role') {
+                context.log?.(`Storage bucket deletion attempted by user ${context.authContext.userId} (role: ${role}) - denied`, 'warn');
+                throw new Error('Deleting storage buckets requires service_role privileges. This operation is restricted in HTTP mode for non-admin users.');
+            }
+            context.log?.(`Storage bucket deletion initiated by ${context.authContext.userId} (role: ${role})`, 'info');
+        }
+
         try {
             // Get bucket details and object count
             const bucketDetails = await client.executeTransactionWithPg(async (pgClient) => {

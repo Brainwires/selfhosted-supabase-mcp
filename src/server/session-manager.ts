@@ -15,6 +15,16 @@ export interface ClientSession {
 }
 
 /**
+ * Error thrown when session limits are exceeded.
+ */
+export class SessionLimitError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'SessionLimitError';
+    }
+}
+
+/**
  * Manages authenticated client sessions for the HTTP MCP server.
  * Tracks active connections and handles session cleanup.
  */
@@ -28,9 +38,22 @@ export class SessionManager {
     /** Cleanup interval in milliseconds (default: 5 minutes) */
     private readonly cleanupIntervalMs: number;
 
-    constructor(options?: { sessionTimeoutMs?: number; cleanupIntervalMs?: number }) {
+    /** Maximum total sessions allowed (default: 1000) */
+    private readonly maxSessions: number;
+
+    /** Maximum sessions per user (default: 10) */
+    private readonly maxSessionsPerUser: number;
+
+    constructor(options?: {
+        sessionTimeoutMs?: number;
+        cleanupIntervalMs?: number;
+        maxSessions?: number;
+        maxSessionsPerUser?: number;
+    }) {
         this.sessionTimeoutMs = options?.sessionTimeoutMs ?? 30 * 60 * 1000;
         this.cleanupIntervalMs = options?.cleanupIntervalMs ?? 5 * 60 * 1000;
+        this.maxSessions = options?.maxSessions ?? 1000;
+        this.maxSessionsPerUser = options?.maxSessionsPerUser ?? 10;
 
         // Start periodic cleanup
         this.cleanupInterval = setInterval(
@@ -44,8 +67,22 @@ export class SessionManager {
 
     /**
      * Creates a new session for a client connection.
+     * @throws SessionLimitError if max sessions or per-user limit is exceeded
      */
     createSession(mcpSessionId: string, authContext: AuthContext): ClientSession {
+        // Check global session limit
+        if (this.sessions.size >= this.maxSessions) {
+            console.error(`[SessionManager] Max sessions limit (${this.maxSessions}) reached, rejecting new session`);
+            throw new SessionLimitError(`Server has reached maximum session limit (${this.maxSessions}). Please try again later.`);
+        }
+
+        // Check per-user session limit
+        const userSessions = this.getSessionsByUserId(authContext.userId);
+        if (userSessions.length >= this.maxSessionsPerUser) {
+            console.error(`[SessionManager] User ${authContext.userId} has reached max sessions (${this.maxSessionsPerUser})`);
+            throw new SessionLimitError(`You have reached the maximum number of concurrent sessions (${this.maxSessionsPerUser}). Please close existing sessions first.`);
+        }
+
         const session: ClientSession = {
             sessionId: mcpSessionId,
             authContext,
@@ -53,7 +90,7 @@ export class SessionManager {
             lastActivityAt: new Date(),
         };
         this.sessions.set(mcpSessionId, session);
-        console.error(`[SessionManager] Session created: ${mcpSessionId} (user: ${authContext.userId})`);
+        console.error(`[SessionManager] Session created: ${mcpSessionId} (user: ${authContext.userId}, total: ${this.sessions.size})`);
         return session;
     }
 

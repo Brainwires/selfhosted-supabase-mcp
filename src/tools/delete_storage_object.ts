@@ -61,6 +61,16 @@ export const deleteStorageObjectTool = {
             throw new Error('Direct database connection (DATABASE_URL) is required for deleting storage objects but is not configured or available.');
         }
 
+        // In HTTP mode, restrict destructive storage operations to service_role
+        if (context.authContext) {
+            const role = context.authContext.role;
+            if (role !== 'service_role') {
+                context.log?.(`Storage object deletion attempted by user ${context.authContext.userId} (role: ${role}) - denied`, 'warn');
+                throw new Error('Deleting storage objects via this tool requires service_role privileges. Use the Supabase Storage API with your JWT for user-level object deletion.');
+            }
+            context.log?.(`Storage object deletion initiated by ${context.authContext.userId} for ${bucket_id}/${path}`, 'info');
+        }
+
         try {
             // Get object details
             const objectDetails = await client.executeTransactionWithPg(async (pgClient) => {

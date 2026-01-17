@@ -3,16 +3,18 @@ import type { Express, Request, Response, NextFunction } from 'express';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest, type AuthInfo } from '@modelcontextprotocol/sdk/types.js';
 import { AuthMiddleware, AuthenticationError } from './auth-middleware.js';
-import { SessionManager } from './session-manager.js';
+import { SessionManager, SessionLimitError } from './session-manager.js';
 import type { AuthContext } from '../tools/types.js';
 
 /**
- * Extended Express request with auth context.
+ * Extended Express request with auth context and MCP SDK auth info.
  */
 interface AuthenticatedRequest extends Request {
     authContext?: AuthContext;
+    /** MCP SDK's auth info field - set by middleware for SDK to pass to handlers */
+    auth?: AuthInfo;
 }
 
 /**
@@ -82,6 +84,7 @@ export class HttpMcpServer {
 
     /**
      * Express middleware for JWT authentication.
+     * Sets both our custom authContext and the MCP SDK's auth field.
      */
     private authMiddlewareHandler = (
         req: AuthenticatedRequest,
@@ -91,6 +94,20 @@ export class HttpMcpServer {
         try {
             const authContext = this.authMiddleware.validateToken(req.headers.authorization);
             req.authContext = authContext;
+
+            // Set MCP SDK's auth field so it's passed to request handlers via extra.authInfo
+            // We store the full AuthContext in the 'extra' field for tools to access
+            req.auth = {
+                token: authContext.accessToken,
+                clientId: authContext.userId,
+                scopes: [authContext.role],
+                expiresAt: authContext.expiresAt,
+                extra: {
+                    // Store the full AuthContext for tool execution
+                    authContext: authContext,
+                },
+            };
+
             next();
         } catch (error) {
             if (error instanceof AuthenticationError) {
@@ -209,6 +226,19 @@ export class HttpMcpServer {
         } catch (error) {
             console.error('[HttpMcpServer] Error handling POST request:', error);
             if (!res.headersSent) {
+                // Handle session limit errors with 429 Too Many Requests
+                if (error instanceof SessionLimitError) {
+                    res.status(429).json({
+                        jsonrpc: '2.0',
+                        error: {
+                            code: -32002,
+                            message: error.message,
+                        },
+                        id: null,
+                    });
+                    return;
+                }
+
                 res.status(500).json({
                     jsonrpc: '2.0',
                     error: {

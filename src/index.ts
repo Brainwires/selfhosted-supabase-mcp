@@ -106,7 +106,7 @@ function setupRequestHandlers(
     }));
 
     // Call tool handler
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
         const toolName = request.params.name;
         const tool = registeredTools[toolName];
 
@@ -124,9 +124,15 @@ function setupRequestHandlers(
                 parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments);
             }
 
+            // Extract AuthContext from MCP SDK's authInfo (set by HTTP server middleware)
+            // This enables RLS enforcement in HTTP mode - tools can check context.authContext
+            // to enforce per-user access restrictions
+            const authContext = extra.authInfo?.extra?.authContext as ToolContext['authContext'] | undefined;
+
             const context: ToolContext = {
                 selfhostedClient,
                 workspacePath: options.workspacePath,
+                authContext, // Pass auth context to tools for RLS enforcement
                 log: (message, level = 'info') => {
                     console.error(`[${level.toUpperCase()}] ${message}`);
                     if (level === 'warn' || level === 'error') {

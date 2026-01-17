@@ -71,6 +71,16 @@ export const createStorageBucketTool = {
             throw new Error('Direct database connection (DATABASE_URL) is required for creating storage buckets but is not configured or available.');
         }
 
+        // In HTTP mode, restrict storage bucket creation to service_role
+        if (context.authContext) {
+            const role = context.authContext.role;
+            if (role !== 'service_role') {
+                context.log?.(`Storage bucket creation attempted by user ${context.authContext.userId} (role: ${role}) - denied`, 'warn');
+                throw new Error('Creating storage buckets requires service_role privileges. This operation is restricted in HTTP mode for non-admin users.');
+            }
+            context.log?.(`Storage bucket creation initiated by ${context.authContext.userId} (role: ${role})`, 'info');
+        }
+
         // Validate bucket name format
         if (!/^[a-z][a-z0-9-]*[a-z0-9]$/.test(name) && name.length >= 3) {
             // Allow simple names that are just lowercase letters/numbers

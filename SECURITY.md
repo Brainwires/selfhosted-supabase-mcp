@@ -2,59 +2,116 @@
 
 This document describes the security features and best practices for using the Self-Hosted Supabase MCP Server.
 
+## Transport Modes
+
+The server supports two transport modes with different security characteristics:
+
+### stdio Mode (Default)
+- Traditional MCP transport for CLI integration
+- No authentication layer - trust is assumed from the parent process
+- Best for: Local development, IDE integrations, trusted environments
+
+### HTTP Mode
+- REST-based transport with JWT authentication
+- Clients must authenticate with a Supabase JWT
+- RLS enforcement available for per-user access control
+- Best for: Web applications, multi-user scenarios
+
+```bash
+# Start in HTTP mode
+node dist/index.js --transport http --port 3100 --jwt-secret $JWT_SECRET ...
+```
+
 ## Security Profiles
 
 The server supports four security profiles that control which tools are available:
 
-### `readonly` (Recommended for most use cases)
+### `readonly` (Safest)
 Only allows querying data, no mutations. Safe for exploration and debugging.
 
 **Enabled tools:**
-- `list_tables`, `list_extensions`, `list_migrations`
-- `execute_sql` (read-only queries only)
-- `get_database_connections`, `get_database_stats`
-- `get_project_url`, `get_anon_key` (masked), `verify_jwt_secret`
-- `list_auth_users`, `get_auth_user`
-- `list_storage_buckets`, `list_storage_objects`
-- `list_realtime_publications`
+- Schema inspection: `list_tables`, `list_extensions`, `list_migrations`
+- SQL (read-only): `execute_sql`
+- Database stats: `get_database_connections`, `get_database_stats`
+- Project config: `get_project_url`, `get_anon_key` (masked), `verify_jwt_secret`
+- Storage (read): `list_storage_buckets`, `list_storage_objects`
+- Realtime: `list_realtime_publications`
+- Schema metadata: `list_rls_policies`, `get_rls_status`, `list_database_functions`, `get_function_definition`, `list_triggers`, `get_trigger_definition`, `list_indexes`, `get_index_stats`, `explain_query`, `list_table_columns`, `list_foreign_keys`, `list_constraints`, `list_available_extensions`
 
 ### `standard`
 Common operations without dangerous capabilities. Good for development.
 
 **Includes everything in `readonly`, plus:**
-- `create_auth_user`
-- `update_auth_user`
+- User management: `user_admin` (list, get, create, update, delete)
+- Session tools: `list_auth_sessions`
+- Auth flows: `signin_with_password`, `signup_user`, `signout_user`
 
-**Excludes:**
+**Excludes (notable):**
 - `get_service_key` (credential exposure)
-- `delete_auth_user` (destructive)
+- `generate_user_token` (sudo/impersonation capability)
 - `apply_migration` (DDL changes)
-- `generate_typescript_types` (external CLI execution)
-- `rebuild_hooks` (system modification)
+- `revoke_session` (session termination)
+- Storage mutations: `create_storage_bucket`, `delete_storage_bucket`, `delete_storage_object`
+- DDL: `enable_rls_on_table`, `create_rls_policy`, `drop_rls_policy`, `create_index`, `drop_index`
+- Extension management: `enable_extension`, `disable_extension`
 
 ### `admin`
-Full access to all tools. Use only when necessary.
+Full access to all tools. Use only when necessary and with trusted users.
 
-**Includes everything.**
+**Includes everything in `standard`, plus all excluded tools.**
 
 ### `custom`
 Use `--tools-config` to specify exactly which tools to enable.
 
-## Usage
-
 ```bash
-# Start with readonly profile (recommended)
-node dist/index.js --security-profile readonly --url ... --anon-key ...
-
-# Start with standard profile
-node dist/index.js --security-profile standard --url ... --anon-key ...
-
-# Start with custom profile
-node dist/index.js --security-profile custom --tools-config ./my-tools.json --url ... --anon-key ...
-
-# Use environment variable
-MCP_SECURITY_PROFILE=readonly node dist/index.js --url ... --anon-key ...
+node dist/index.js --security-profile custom --tools-config ./my-tools.json ...
 ```
+
+Config file format:
+```json
+{
+  "enabledTools": ["list_tables", "execute_sql", "list_auth_sessions"]
+}
+```
+
+## HTTP Mode Security
+
+### JWT Authentication
+All requests must include a valid Supabase JWT in the Authorization header:
+```
+Authorization: Bearer <JWT>
+```
+
+The JWT is validated against the configured `--jwt-secret` (SUPABASE_AUTH_JWT_SECRET).
+
+### RLS Enforcement (Per-User Access)
+
+In HTTP mode, certain tools enforce Row-Level Security based on the authenticated user:
+
+| Tool | RLS Behavior |
+|------|--------------|
+| `list_auth_sessions` | Users can only see their own sessions |
+| `revoke_session` | Users can only revoke their own sessions |
+| Storage mutations | Require `service_role` JWT |
+
+**Example**: When an authenticated user calls `list_auth_sessions`, they only see sessions for their own `user_id`, regardless of any `user_id` filter parameter.
+
+### Service Role Restrictions
+
+In HTTP mode, these operations require a `service_role` JWT (not regular `authenticated` role):
+- `create_storage_bucket`
+- `delete_storage_bucket`
+- `delete_storage_object`
+
+This prevents regular users from modifying shared infrastructure.
+
+### Session Limits
+
+The HTTP server enforces session limits to prevent resource exhaustion:
+- **Max total sessions**: 1000 (default)
+- **Max sessions per user**: 10 (default)
+
+Exceeding these limits returns HTTP 429 (Too Many Requests).
 
 ## Tool-Specific Safety Features
 
@@ -69,7 +126,7 @@ To reveal the full key (when you actually need it):
 
 ### SQL Execution (`execute_sql`)
 
-The `execute_sql` tool now has safety flags to prevent accidental data modification:
+The `execute_sql` tool has safety flags to prevent accidental data modification:
 
 | Query Type | Flag Required | Description |
 |------------|---------------|-------------|
@@ -88,25 +145,42 @@ Example:
 }
 ```
 
-### User Deletion (`delete_auth_user`)
+### User Management (`user_admin`)
 
-Requires explicit confirmation and offers a safer alternative:
+Consolidated tool for all user operations. Requires explicit confirmation for deletions:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `operation` | required | `list`, `get`, `create`, `update`, or `delete` |
 | `confirm` | `false` | Must be `true` to actually delete |
 | `disable_instead` | `false` | Disable the user instead of deleting |
-
-Without `confirm: true`, you'll get a preview of the user to be deleted.
 
 Example (soft delete):
 ```json
 {
+  "operation": "delete",
   "user_id": "...",
   "confirm": true,
   "disable_instead": true
 }
 ```
+
+### Token Generation (`generate_user_token`)
+
+**This is a powerful sudo capability** - generates valid JWTs for any user without knowing their password.
+
+Use cases:
+- Admin impersonation for debugging
+- Testing user-specific functionality
+- Service-to-service authentication
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `user_id` | required | User to generate token for |
+| `create_session` | `false` | Create real session in DB (appears in `list_auth_sessions`) |
+| `expires_in` | `3600` | Token validity in seconds |
+
+This tool is **excluded from `standard` profile** and only available in `admin`.
 
 ### Migrations (`apply_migration`)
 
@@ -162,6 +236,7 @@ Logs are JSON-structured for easy parsing:
 - All tool executions (success and failure)
 - Blocked operations (disabled tools, missing permissions)
 - Security-relevant events (credential reveals, destructive operations)
+- RLS enforcement actions (in HTTP mode)
 
 ### Sensitive Field Redaction
 
@@ -178,17 +253,21 @@ The following fields are automatically redacted in logs:
 
 1. **Start with `readonly`** - Use the most restrictive profile that meets your needs.
 
-2. **Use a dedicated database user** - Don't use the postgres superuser. Create a user with only the permissions needed.
+2. **Use HTTP mode for multi-user** - Never expose stdio mode to untrusted users.
 
-3. **Enable audit logging** - Always have `--audit-log` pointing to a file for production use.
+3. **Use a dedicated database user** - Don't use the postgres superuser. Create a user with only the permissions needed.
 
-4. **Avoid storing credentials in config files** - Use environment variables or secret management.
+4. **Enable audit logging** - Always have `--audit-log` pointing to a file for production use.
 
-5. **Review before confirming** - Always run migrations and deletions without `confirm` first to see the preview.
+5. **Avoid storing credentials in config files** - Use environment variables or secret management.
 
-6. **Use `dry_run` for SQL** - Test complex queries with `dry_run: true` before executing.
+6. **Review before confirming** - Always run migrations and deletions without `confirm` first to see the preview.
 
-7. **Prefer `disable_instead`** - When removing user access, disable instead of delete to preserve audit trails.
+7. **Use `dry_run` for SQL** - Test complex queries with `dry_run: true` before executing.
+
+8. **Prefer `disable_instead`** - When removing user access, disable instead of delete to preserve audit trails.
+
+9. **Restrict `generate_user_token`** - This tool enables user impersonation; only enable it when absolutely necessary.
 
 ## Environment Variables
 
@@ -198,8 +277,11 @@ The following fields are automatically redacted in logs:
 | `SUPABASE_ANON_KEY` | Anonymous key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (optional) |
 | `DATABASE_URL` | Direct PostgreSQL connection |
-| `SUPABASE_AUTH_JWT_SECRET` | JWT secret (optional) |
+| `SUPABASE_AUTH_JWT_SECRET` | JWT secret (required for HTTP mode) |
 | `MCP_SECURITY_PROFILE` | Default security profile |
+| `MCP_TRANSPORT` | Transport mode: `stdio` or `http` |
+| `MCP_PORT` | HTTP port (default: 3100) |
+| `MCP_HOST` | HTTP host (default: 127.0.0.1) |
 
 ## Reporting Security Issues
 
