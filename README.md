@@ -104,7 +104,10 @@ The server requires configuration details for your Supabase instance. These can 
 *   `--service-key <key>` or `SUPABASE_SERVICE_ROLE_KEY=<key>`: Your Supabase project's service role key. Needed for operations requiring elevated privileges, like attempting to automatically create the `execute_sql` helper function if it doesn't exist.
 *   `--db-url <url>` or `DATABASE_URL=<url>`: The direct PostgreSQL connection string for your Supabase database (e.g., `postgresql://postgres:password@localhost:5432/postgres`). Required for tools needing direct database access or transactions (`apply_migration`, Auth tools, Storage tools, querying `pg_catalog`, etc.).
 *   `--jwt-secret <secret>` or `SUPABASE_AUTH_JWT_SECRET=<secret>`: Your Supabase project's JWT secret. Needed for tools like `verify_jwt_secret`.
-*   `--tools-config <path>`: Path to a JSON file specifying which tools to enable (whitelist). If omitted, all tools defined in the server are enabled. The file should have the format `{"enabledTools": ["tool_name_1", "tool_name_2"]}`.
+*   `--security-profile <profile>`: Security profile controlling which tools are enabled. Options: `readonly`, `standard`, `admin` (default), `custom`. See [SECURITY.md](./SECURITY.md) for details.
+*   `--tools-config <path>`: Path to a JSON file specifying which tools to enable. Required when using `--security-profile custom`. The file should have the format `{"enabledTools": ["tool_name_1", "tool_name_2"]}`.
+*   `--audit-log <path>`: Path to write audit logs (in addition to stderr).
+*   `--no-audit`: Disable audit logging.
 
 ### Important Notes:
 

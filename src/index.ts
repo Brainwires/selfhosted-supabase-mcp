@@ -32,6 +32,8 @@ import type { ToolContext } from './tools/types.js';
 import listStorageBucketsTool from './tools/list_storage_buckets.js';
 import listStorageObjectsTool from './tools/list_storage_objects.js';
 import listRealtimePublicationsTool from './tools/list_realtime_publications.js';
+import { getProfileTools, isValidProfile, getProfileDescriptions, type SecurityProfile } from './security-profiles.js';
+import { AuditLogger } from './audit-logger.js';
 
 // Node.js built-in modules
 import * as fs from 'node:fs';
@@ -68,7 +70,11 @@ async function main() {
         .option('--db-url <url>', 'Direct database connection string (optional, for pg fallback)', process.env.DATABASE_URL)
         .option('--jwt-secret <secret>', 'Supabase JWT secret (optional, needed for some tools)', process.env.SUPABASE_AUTH_JWT_SECRET)
         .option('--workspace-path <path>', 'Workspace root path (for file operations)', process.cwd())
-        .option('--tools-config <path>', 'Path to a JSON file specifying which tools to enable (e.g., { "enabledTools": ["tool1", "tool2"] }). If omitted, all tools are enabled.')
+        .option('--security-profile <profile>', 'Security profile: readonly, standard, admin, or custom (default: admin)', process.env.MCP_SECURITY_PROFILE || 'admin')
+        .option('--tools-config <path>', 'Path to a JSON file specifying which tools to enable. Required when using --security-profile custom.')
+        .option('--audit-log <path>', 'Path to write audit logs (in addition to stderr)')
+        .option('--no-audit', 'Disable audit logging')
+        .addHelpText('after', `\n${getProfileDescriptions()}`)
         .parse(process.argv);
 
     const options = program.opts();
@@ -83,6 +89,19 @@ async function main() {
     }
 
     console.error('Initializing Self-Hosted Supabase MCP Server...');
+
+    // Initialize audit logger
+    const auditLogger = new AuditLogger({
+        enabled: options.audit !== false, // --no-audit sets this to false
+        logFile: options.auditLog as string | undefined,
+        logToStderr: true,
+    });
+
+    if (options.audit !== false) {
+        console.error(`Audit logging enabled${options.auditLog ? ` (also writing to ${options.auditLog})` : ''}`);
+    } else {
+        console.error('Audit logging disabled');
+    }
 
     try {
         const selfhostedClient = await SelfhostedSupabaseClient.create({
@@ -120,15 +139,31 @@ async function main() {
             [listRealtimePublicationsTool.name]: listRealtimePublicationsTool as AppTool,
         };
 
-        // --- Tool Filtering Logic ---
+        // --- Security Profile & Tool Filtering Logic ---
         let registeredTools: Record<string, AppTool> = { ...availableTools }; // Start with all tools
         const toolsConfigPath = options.toolsConfig as string | undefined;
+        const securityProfile = (options.securityProfile as string) || 'admin';
         let enabledToolNames: Set<string> | null = null; // Use Set for efficient lookup
 
-        if (toolsConfigPath) {
+        // Validate security profile
+        if (!isValidProfile(securityProfile)) {
+            console.error(`Error: Invalid security profile '${securityProfile}'. Valid options: readonly, standard, admin, custom`);
+            throw new Error(`Invalid security profile: ${securityProfile}`);
+        }
+
+        console.error(`Security profile: ${securityProfile}`);
+
+        // Get tool whitelist based on profile or config file
+        if (securityProfile === 'custom') {
+            // Custom profile requires tools-config file
+            if (!toolsConfigPath) {
+                console.error('Error: --tools-config is required when using --security-profile custom');
+                throw new Error('--tools-config is required when using --security-profile custom');
+            }
+
             try {
                 const resolvedPath = path.resolve(toolsConfigPath);
-                console.error(`Attempting to load tool configuration from: ${resolvedPath}`);
+                console.error(`Loading custom tool configuration from: ${resolvedPath}`);
                 if (!fs.existsSync(resolvedPath)) {
                     throw new Error(`Tool configuration file not found at ${resolvedPath}`);
                 }
@@ -136,47 +171,50 @@ async function main() {
                 const configJson = JSON.parse(configFileContent);
 
                 if (!configJson || typeof configJson !== 'object' || !Array.isArray(configJson.enabledTools)) {
-                     throw new Error('Invalid config file format. Expected { "enabledTools": ["tool1", ...] }.');
+                    throw new Error('Invalid config file format. Expected { "enabledTools": ["tool1", ...] }.');
                 }
 
-                // Validate that enabledTools contains only strings
                 const toolNames = configJson.enabledTools as unknown[];
                 if (!toolNames.every((name): name is string => typeof name === 'string')) {
                     throw new Error('Invalid config file content. "enabledTools" must be an array of strings.');
                 }
 
                 enabledToolNames = new Set(toolNames.map(name => name.trim()).filter(name => name.length > 0));
-
             } catch (error: unknown) {
-                console.error(`Error loading or parsing tool config file '${toolsConfigPath}':`, error instanceof Error ? error.message : String(error));
-                console.error('Falling back to enabling all tools due to config error.');
-                enabledToolNames = null; // Reset to null to signify fallback
+                console.error(`Error loading tool config file '${toolsConfigPath}':`, error instanceof Error ? error.message : String(error));
+                throw error; // Don't fall back for custom profile - explicit config is required
+            }
+        } else {
+            // Use predefined security profile
+            const profileTools = getProfileTools(securityProfile as SecurityProfile);
+            if (profileTools) {
+                enabledToolNames = new Set(profileTools);
             }
         }
 
-        if (enabledToolNames !== null) { // Check if we successfully got names from config
-            console.error(`Whitelisting tools based on config: ${Array.from(enabledToolNames).join(', ')}`);
+        // Apply tool filtering
+        if (enabledToolNames !== null) {
+            console.error(`Enabled tools (${enabledToolNames.size}): ${Array.from(enabledToolNames).join(', ')}`);
 
-            registeredTools = {}; // Reset and add only whitelisted tools
+            registeredTools = {};
             for (const toolName in availableTools) {
                 if (enabledToolNames.has(toolName)) {
                     registeredTools[toolName] = availableTools[toolName];
                 } else {
-                    console.error(`Tool ${toolName} disabled (not in config whitelist).`);
+                    console.error(`Tool ${toolName} disabled by security profile.`);
                 }
             }
 
-            // Check if any tools specified in the config were not found in availableTools
+            // Warn about any tools in config that don't exist
             for (const requestedName of enabledToolNames) {
                 if (!availableTools[requestedName]) {
-                    console.warn(`Warning: Tool "${requestedName}" specified in config file not found.`);
+                    console.warn(`Warning: Tool "${requestedName}" specified but not found in available tools.`);
                 }
             }
         } else {
-            console.error("No valid --tools-config specified or error loading config, enabling all available tools.");
-            // registeredTools already defaults to all tools, so no action needed here
+            console.error('All tools enabled (admin profile or no filtering applied).');
         }
-        // --- End Tool Filtering Logic ---
+        // --- End Security Profile & Tool Filtering Logic ---
 
         // Prepare capabilities for the Server constructor
         const capabilitiesTools: Record<string, McpToolSchema> = {};
@@ -222,7 +260,8 @@ async function main() {
             if (!tool) {
                 // Check if it existed originally but was filtered out
                 if (availableTools[toolName as keyof typeof availableTools]) {
-                     throw new McpError(ErrorCode.MethodNotFound, `Tool "${toolName}" is available but not enabled by the current server configuration.`);
+                    auditLogger.logBlocked(toolName, 'Tool disabled by security profile', request.params.arguments as Record<string, unknown>);
+                    throw new McpError(ErrorCode.MethodNotFound, `Tool "${toolName}" is available but not enabled by the current server configuration.`);
                 }
                 // If the tool wasn't in the original list either, it's unknown
                 throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
@@ -246,12 +285,19 @@ async function main() {
                     log: (message, level = 'info') => {
                         // Simple logger using console.error (consistent with existing logs)
                         console.error(`[${level.toUpperCase()}] ${message}`);
+                        // Also log security-relevant messages to audit
+                        if (level === 'warn' || level === 'error') {
+                            auditLogger.logSecurityEvent(toolName, 'log', { message, level });
+                        }
                     }
                 };
 
                 // Call the tool's execute method
                 // biome-ignore lint/suspicious/noExplicitAny: <explanation>
                 const result = await tool.execute(parsedArgs as any, context);
+
+                // Log successful execution
+                auditLogger.logToolExecution(toolName, parsedArgs as Record<string, unknown>, 'success');
 
                 return {
                     content: [
@@ -262,19 +308,28 @@ async function main() {
                     ],
                 };
             } catch (error: unknown) {
-                 console.error(`Error executing tool ${toolName}:`, error);
-                 let errorMessage = `Error executing tool ${toolName}: `;
-                 if (error instanceof z.ZodError) {
-                     errorMessage += `Input validation failed: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
-                 } else if (error instanceof Error) {
-                     errorMessage += error.message;
-                 } else {
-                     errorMessage += String(error);
-                 }
-                 return {
+                console.error(`Error executing tool ${toolName}:`, error);
+                let errorMessage = `Error executing tool ${toolName}: `;
+                if (error instanceof z.ZodError) {
+                    errorMessage += `Input validation failed: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
+                } else if (error instanceof Error) {
+                    errorMessage += error.message;
+                } else {
+                    errorMessage += String(error);
+                }
+
+                // Log failed execution
+                auditLogger.logToolExecution(
+                    toolName,
+                    request.params.arguments as Record<string, unknown>,
+                    'failure',
+                    errorMessage
+                );
+
+                return {
                     content: [{ type: 'text', text: errorMessage }],
                     isError: true,
-                 };
+                };
             }
         });
 
