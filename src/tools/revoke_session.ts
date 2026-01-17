@@ -3,7 +3,7 @@ import type { ToolContext } from './types.js';
 
 // Input schema
 const RevokeSessionInputSchema = z.object({
-    session_id: z.string().uuid().describe('The UUID of the session to revoke.'),
+    session_id: z.uuid().describe('The UUID of the session to revoke.'),
     confirm: z.boolean().optional().default(false).describe('Must be true to execute. Without this, returns a preview.'),
 });
 type RevokeSessionInput = z.infer<typeof RevokeSessionInputSchema>;

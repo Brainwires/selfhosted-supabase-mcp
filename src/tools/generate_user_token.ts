@@ -2,12 +2,12 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback } from './utils.js';
+import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 import type { PoolClient } from 'pg';
 
 // Input schema
 const GenerateUserTokenInputSchema = z.object({
-    user_id: z.string().uuid().describe('The UUID of the user to generate a token for.'),
+    user_id: z.uuid().describe('The UUID of the user to generate a token for.'),
     create_session: z.boolean().optional().default(false).describe('Whether to create a real session in auth.sessions (default: false). When true, the session will appear in list_auth_sessions.'),
     expires_in: z.number().optional().default(3600).describe('Token expiration time in seconds (default: 3600 = 1 hour).'),
 });
@@ -20,8 +20,8 @@ const GenerateUserTokenOutputSchema = z.object({
     refresh_token: z.string().optional(),
     expires_at: z.number().optional(),
     expires_in: z.number().optional(),
-    session_id: z.string().uuid().optional(),
-    user_id: z.string().uuid().optional(),
+    session_id: z.uuid().optional(),
+    user_id: z.uuid().optional(),
     email: z.string().optional(),
     mode: z.enum(['jwt_only', 'full_session']).optional(),
     error: z.string().optional(),
@@ -86,14 +86,14 @@ export const generateUserTokenTool = {
                 WHERE id = '${user_id.replace(/'/g, "''")}'
             `, true);
 
-            if (!userResult.success) {
+            if (isSqlErrorResponse(userResult)) {
                 return {
                     success: false,
-                    error: `Failed to fetch user: ${(userResult as { error?: { message: string } }).error?.message || 'Unknown error'}`,
+                    error: `Failed to fetch user: ${userResult.error.message}`,
                 };
             }
 
-            const users = userResult.data as Array<{
+            const users = userResult as Array<{
                 id: string;
                 email: string | null;
                 role: string | null;

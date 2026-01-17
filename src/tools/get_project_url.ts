@@ -8,7 +8,7 @@ type GetProjectUrlInput = z.infer<typeof GetProjectUrlInputSchema>;
 
 // Output schema
 const GetProjectUrlOutputSchema = z.object({
-    project_url: z.string().url(),
+    project_url: z.url(),
 });
 
 // Static JSON Schema for MCP capabilities

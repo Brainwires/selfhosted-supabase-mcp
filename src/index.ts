@@ -150,7 +150,7 @@ function setupRequestHandlers(
 
             let errorMessage = `Error executing tool ${toolName}: `;
             if (error instanceof z.ZodError) {
-                errorMessage += `Input validation failed: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
+                errorMessage += `Input validation failed: ${error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
             } else if (error instanceof Error) {
                 errorMessage += error.message;
             } else {

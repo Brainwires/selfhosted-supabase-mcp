@@ -28,7 +28,7 @@ export function handleSqlResponse<T>(result: SqlExecutionResult, schema: z.ZodSc
         return schema.parse(result);
     } catch (validationError) {
         if (validationError instanceof z.ZodError) {
-            throw new Error(`Schema validation failed: ${validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
+            throw new Error(`Schema validation failed: ${validationError.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
         }
         throw new Error(`Unexpected validation error: ${validationError}`);
     }

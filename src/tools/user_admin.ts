@@ -4,14 +4,14 @@ import type { PoolClient } from 'pg';
 
 // Shared AuthUser schema
 const AuthUserSchema = z.object({
-    id: z.string().uuid(),
-    email: z.string().email().nullable(),
+    id: z.uuid(),
+    email: z.email().nullable(),
     role: z.string().nullable(),
     created_at: z.string().nullable(),
     updated_at: z.string().nullable().optional(),
     last_sign_in_at: z.string().nullable(),
-    raw_app_meta_data: z.record(z.unknown()).nullable(),
-    raw_user_meta_data: z.record(z.unknown()).nullable(),
+    raw_app_meta_data: z.record(z.string(), z.unknown()).nullable(),
+    raw_user_meta_data: z.record(z.string(), z.unknown()).nullable(),
 });
 
 // Input schema with discriminated union based on operation
@@ -25,31 +25,31 @@ const UserAdminInputSchema = z.discriminatedUnion('operation', [
     // Get operation
     z.object({
         operation: z.literal('get'),
-        user_id: z.string().uuid().describe('The UUID of the user to retrieve.'),
+        user_id: z.uuid().describe('The UUID of the user to retrieve.'),
     }),
     // Create operation
     z.object({
         operation: z.literal('create'),
-        email: z.string().email().describe('The email address for the new user.'),
+        email: z.email().describe('The email address for the new user.'),
         password: z.string().min(6).describe('Plain text password (min 6 chars). WARNING: Insecure.'),
         role: z.string().optional().default('authenticated').describe('User role.'),
-        app_metadata: z.record(z.unknown()).optional().describe('Optional app metadata.'),
-        user_metadata: z.record(z.unknown()).optional().describe('Optional user metadata.'),
+        app_metadata: z.record(z.string(), z.unknown()).optional().describe('Optional app metadata.'),
+        user_metadata: z.record(z.string(), z.unknown()).optional().describe('Optional user metadata.'),
     }),
     // Update operation
     z.object({
         operation: z.literal('update'),
-        user_id: z.string().uuid().describe('The UUID of the user to update.'),
-        email: z.string().email().optional().describe('New email address.'),
+        user_id: z.uuid().describe('The UUID of the user to update.'),
+        email: z.email().optional().describe('New email address.'),
         password: z.string().min(6).optional().describe('New plain text password (min 6 chars). WARNING: Insecure.'),
         role: z.string().optional().describe('New role.'),
-        app_metadata: z.record(z.unknown()).optional().describe('New app metadata (will overwrite existing).'),
-        user_metadata: z.record(z.unknown()).optional().describe('New user metadata (will overwrite existing).'),
+        app_metadata: z.record(z.string(), z.unknown()).optional().describe('New app metadata (will overwrite existing).'),
+        user_metadata: z.record(z.string(), z.unknown()).optional().describe('New user metadata (will overwrite existing).'),
     }),
     // Delete operation
     z.object({
         operation: z.literal('delete'),
-        user_id: z.string().uuid().describe('The UUID of the user to delete.'),
+        user_id: z.uuid().describe('The UUID of the user to delete.'),
         confirm: z.boolean().optional().default(false).describe('Must be true to actually delete. Without this, returns a preview.'),
         disable_instead: z.boolean().optional().default(false).describe('If true, disables the user instead of permanently deleting them (soft delete).'),
     }),

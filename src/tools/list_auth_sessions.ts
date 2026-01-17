@@ -19,7 +19,7 @@ const ListAuthSessionsOutputSchema = z.array(z.object({
 
 // Input schema with optional filters
 const ListAuthSessionsInputSchema = z.object({
-    user_id: z.string().uuid().optional().describe('Filter sessions by user ID.'),
+    user_id: z.uuid().optional().describe('Filter sessions by user ID.'),
     limit: z.number().optional().default(50).describe('Maximum number of sessions to return.'),
     offset: z.number().optional().default(0).describe('Number of sessions to skip.'),
 });

@@ -16,17 +16,17 @@ type ListStorageObjectsInput = z.infer<typeof ListStorageObjectsInputSchema>;
 
 // Output schema
 const StorageObjectSchema = z.object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string().nullable(), // Name can be null according to schema
     bucket_id: z.string(),
-    owner: z.string().uuid().nullable(),
+    owner: z.uuid().nullable(),
     version: z.string().nullable(),
     // Get mimetype directly from SQL extraction
     mimetype: z.string().nullable(), 
     // size comes from metadata
     size: z.string().pipe(z.coerce.number().int()).nullable(),
     // Keep raw metadata as well
-    metadata: z.record(z.any()).nullable(),
+    metadata: z.record(z.string(), z.any()).nullable(),
     created_at: z.string().nullable(),
     updated_at: z.string().nullable(),
     last_accessed_at: z.string().nullable(),

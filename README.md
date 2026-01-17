@@ -190,7 +190,7 @@ npx -y @smithery/cli install @HenkDz/selfhosted-supabase-mcp --client claude
 
 ### Prerequisites
 
-*   Node.js (Version 18.x or later recommended)
+*   Node.js (Version 20.x or later required)
 *   npm (usually included with Node.js)
 *   Access to your self-hosted Supabase instance (URL, keys, potentially direct DB connection string).
 

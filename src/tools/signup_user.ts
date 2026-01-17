@@ -3,10 +3,10 @@ import type { ToolContext } from './types.js';
 
 // Input schema
 const SignupUserInputSchema = z.object({
-    email: z.string().email().describe('The email address for the new user.'),
+    email: z.email().describe('The email address for the new user.'),
     password: z.string().min(6).describe('The password for the new user (min 6 characters).'),
     return_session: z.boolean().optional().default(true).describe('Whether to return session tokens after signup (default: true).'),
-    user_metadata: z.record(z.unknown()).optional().describe('Optional user metadata to attach to the user.'),
+    user_metadata: z.record(z.string(), z.unknown()).optional().describe('Optional user metadata to attach to the user.'),
     email_confirm: z.boolean().optional().default(false).describe('Whether to auto-confirm the email (requires service role key, default: false).'),
 });
 type SignupUserInput = z.infer<typeof SignupUserInputSchema>;
@@ -14,8 +14,8 @@ type SignupUserInput = z.infer<typeof SignupUserInputSchema>;
 // Output schema
 const SignupUserOutputSchema = z.object({
     success: z.boolean(),
-    user_id: z.string().uuid().optional(),
-    email: z.string().email().optional(),
+    user_id: z.uuid().optional(),
+    email: z.email().optional(),
     email_confirmed: z.boolean().optional(),
     access_token: z.string().optional(),
     refresh_token: z.string().optional(),

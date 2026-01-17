@@ -3,7 +3,7 @@ import type { ToolContext } from './types.js';
 
 // Input schema
 const SigninWithPasswordInputSchema = z.object({
-    email: z.string().email().describe('The email address of the user to sign in.'),
+    email: z.email().describe('The email address of the user to sign in.'),
     password: z.string().min(1).describe('The password for the user.'),
 });
 type SigninWithPasswordInput = z.infer<typeof SigninWithPasswordInputSchema>;
@@ -16,8 +16,8 @@ const SigninWithPasswordOutputSchema = z.object({
     expires_at: z.number().optional(),
     expires_in: z.number().optional(),
     token_type: z.string().optional(),
-    user_id: z.string().uuid().optional(),
-    email: z.string().email().optional(),
+    user_id: z.uuid().optional(),
+    email: z.email().optional(),
     error: z.string().optional(),
 });
 

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback } from './utils.js';
+import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Input schema
 const SignoutUserInputSchema = z.object({
-    user_id: z.string().uuid().optional().describe('The UUID of the user to sign out. If provided, revokes all sessions for this user.'),
-    session_id: z.string().uuid().optional().describe('The UUID of a specific session to revoke. Takes precedence over user_id if both provided.'),
+    user_id: z.uuid().optional().describe('The UUID of the user to sign out. If provided, revokes all sessions for this user.'),
+    session_id: z.uuid().optional().describe('The UUID of a specific session to revoke. Takes precedence over user_id if both provided.'),
     scope: z.enum(['local', 'global', 'others']).optional().default('global').describe('Scope of signout: "local" (current session via Supabase client), "global" (all sessions), "others" (all except current). Default: global.'),
 });
 type SignoutUserInput = z.infer<typeof SignoutUserInputSchema>;
@@ -73,14 +73,14 @@ export const signoutUserTool = {
                     SELECT COUNT(*) AS deleted_count FROM deleted
                 `, true);
 
-                if (!result.success) {
+                if (isSqlErrorResponse(result)) {
                     return {
                         success: false,
-                        error: `Failed to revoke session: ${(result as { error?: { message: string } }).error?.message || 'Unknown error'}`,
+                        error: `Failed to revoke session: ${result.error.message}`,
                     };
                 }
 
-                const deletedCount = ((result.data as Array<{ deleted_count: string }>)[0]?.deleted_count) || '0';
+                const deletedCount = ((result as Array<{ deleted_count: string }>)[0]?.deleted_count) || '0';
                 const count = parseInt(deletedCount, 10);
 
                 if (count === 0) {
@@ -118,14 +118,14 @@ export const signoutUserTool = {
                     SELECT COUNT(*) AS deleted_count FROM deleted
                 `, true);
 
-                if (!result.success) {
+                if (isSqlErrorResponse(result)) {
                     return {
                         success: false,
-                        error: `Failed to revoke sessions: ${(result as { error?: { message: string } }).error?.message || 'Unknown error'}`,
+                        error: `Failed to revoke sessions: ${result.error.message}`,
                     };
                 }
 
-                const deletedCount = ((result.data as Array<{ deleted_count: string }>)[0]?.deleted_count) || '0';
+                const deletedCount = ((result as Array<{ deleted_count: string }>)[0]?.deleted_count) || '0';
                 const count = parseInt(deletedCount, 10);
 
                 context.log?.(`Revoked ${count} session(s) for user ${user_id}`, 'info');
