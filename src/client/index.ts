@@ -260,6 +260,32 @@ export class SelfhostedSupabaseClient {
         }
     }
 
+    /**
+     * Gets the raw pg Pool for operations that cannot run inside a transaction
+     * (e.g., CREATE INDEX CONCURRENTLY, DROP INDEX CONCURRENTLY).
+     * Returns null if DATABASE_URL is not configured.
+     */
+    public getPgPool(): Pool | null {
+        if (!this.options.databaseUrl) {
+            return null;
+        }
+        // Note: ensurePgPool is called lazily elsewhere, so pool may not be initialized yet.
+        // Caller should ensure pool is available before using this.
+        return this.pgPool;
+    }
+
+    /**
+     * Ensures the pg pool is initialized and returns it.
+     * Useful when you need the pool initialized before calling getPgPool.
+     */
+    public async ensurePgPoolInitialized(): Promise<Pool | null> {
+        if (!this.options.databaseUrl) {
+            return null;
+        }
+        await this.ensurePgPool();
+        return this.pgPool;
+    }
+
     // --- Helper/Private Methods (to be implemented) ---
 
     private async checkAndCreateRpcFunction(): Promise<void> {

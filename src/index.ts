@@ -26,6 +26,46 @@ import { getAuthUserTool } from './tools/get_auth_user.js';
 import { deleteAuthUserTool } from './tools/delete_auth_user.js';
 import { createAuthUserTool } from './tools/create_auth_user.js';
 import { updateAuthUserTool } from './tools/update_auth_user.js';
+// New tool imports - RLS
+import { listRlsPoliciesTool } from './tools/list_rls_policies.js';
+import { getRlsStatusTool } from './tools/get_rls_status.js';
+import { enableRlsOnTableTool } from './tools/enable_rls_on_table.js';
+import { createRlsPolicyTool } from './tools/create_rls_policy.js';
+import { dropRlsPolicyTool } from './tools/drop_rls_policy.js';
+// New tool imports - Functions & Triggers
+import { listDatabaseFunctionsTool } from './tools/list_database_functions.js';
+import { getFunctionDefinitionTool } from './tools/get_function_definition.js';
+import { listTriggersTool } from './tools/list_triggers.js';
+import { getTriggerDefinitionTool } from './tools/get_trigger_definition.js';
+// New tool imports - Indexes
+import { listIndexesTool } from './tools/list_indexes.js';
+import { getIndexStatsTool } from './tools/get_index_stats.js';
+import { createIndexTool } from './tools/create_index.js';
+import { dropIndexTool } from './tools/drop_index.js';
+// New tool imports - Query Analysis
+import { explainQueryTool } from './tools/explain_query.js';
+// New tool imports - Column & Constraint Metadata
+import { listTableColumnsTool } from './tools/list_table_columns.js';
+import { listForeignKeysTool } from './tools/list_foreign_keys.js';
+import { listConstraintsTool } from './tools/list_constraints.js';
+// New tool imports - Auth Sessions
+import { listAuthSessionsTool } from './tools/list_auth_sessions.js';
+import { revokeSessionTool } from './tools/revoke_session.js';
+// New tool imports - Storage Operations
+import { createStorageBucketTool } from './tools/create_storage_bucket.js';
+import { deleteStorageBucketTool } from './tools/delete_storage_bucket.js';
+import { deleteStorageObjectTool } from './tools/delete_storage_object.js';
+// New tool imports - Extension Management
+import { listAvailableExtensionsTool } from './tools/list_available_extensions.js';
+import { enableExtensionTool } from './tools/enable_extension.js';
+import { disableExtensionTool } from './tools/disable_extension.js';
+// New tool imports - Auth Session Operations
+import { signinWithPasswordTool } from './tools/signin_with_password.js';
+import { signupUserTool } from './tools/signup_user.js';
+import { generateUserTokenTool } from './tools/generate_user_token.js';
+import { refreshSessionTool } from './tools/refresh_session.js';
+import { getCurrentSessionTool } from './tools/get_current_session.js';
+import { signoutUserTool } from './tools/signout_user.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ToolContext } from './tools/types.js';
@@ -137,6 +177,46 @@ async function main() {
             [listStorageBucketsTool.name]: listStorageBucketsTool as AppTool,
             [listStorageObjectsTool.name]: listStorageObjectsTool as AppTool,
             [listRealtimePublicationsTool.name]: listRealtimePublicationsTool as AppTool,
+            // New tools - RLS
+            [listRlsPoliciesTool.name]: listRlsPoliciesTool as AppTool,
+            [getRlsStatusTool.name]: getRlsStatusTool as AppTool,
+            [enableRlsOnTableTool.name]: enableRlsOnTableTool as AppTool,
+            [createRlsPolicyTool.name]: createRlsPolicyTool as AppTool,
+            [dropRlsPolicyTool.name]: dropRlsPolicyTool as AppTool,
+            // New tools - Functions & Triggers
+            [listDatabaseFunctionsTool.name]: listDatabaseFunctionsTool as AppTool,
+            [getFunctionDefinitionTool.name]: getFunctionDefinitionTool as AppTool,
+            [listTriggersTool.name]: listTriggersTool as AppTool,
+            [getTriggerDefinitionTool.name]: getTriggerDefinitionTool as AppTool,
+            // New tools - Indexes
+            [listIndexesTool.name]: listIndexesTool as AppTool,
+            [getIndexStatsTool.name]: getIndexStatsTool as AppTool,
+            [createIndexTool.name]: createIndexTool as AppTool,
+            [dropIndexTool.name]: dropIndexTool as AppTool,
+            // New tools - Query Analysis
+            [explainQueryTool.name]: explainQueryTool as AppTool,
+            // New tools - Column & Constraint Metadata
+            [listTableColumnsTool.name]: listTableColumnsTool as AppTool,
+            [listForeignKeysTool.name]: listForeignKeysTool as AppTool,
+            [listConstraintsTool.name]: listConstraintsTool as AppTool,
+            // New tools - Auth Sessions
+            [listAuthSessionsTool.name]: listAuthSessionsTool as AppTool,
+            [revokeSessionTool.name]: revokeSessionTool as AppTool,
+            // New tools - Storage Operations
+            [createStorageBucketTool.name]: createStorageBucketTool as AppTool,
+            [deleteStorageBucketTool.name]: deleteStorageBucketTool as AppTool,
+            [deleteStorageObjectTool.name]: deleteStorageObjectTool as AppTool,
+            // New tools - Extension Management
+            [listAvailableExtensionsTool.name]: listAvailableExtensionsTool as AppTool,
+            [enableExtensionTool.name]: enableExtensionTool as AppTool,
+            [disableExtensionTool.name]: disableExtensionTool as AppTool,
+            // New tools - Auth Session Operations
+            [signinWithPasswordTool.name]: signinWithPasswordTool as AppTool,
+            [signupUserTool.name]: signupUserTool as AppTool,
+            [generateUserTokenTool.name]: generateUserTokenTool as AppTool,
+            [refreshSessionTool.name]: refreshSessionTool as AppTool,
+            [getCurrentSessionTool.name]: getCurrentSessionTool as AppTool,
+            [signoutUserTool.name]: signoutUserTool as AppTool,
         };
 
         // --- Security Profile & Tool Filtering Logic ---

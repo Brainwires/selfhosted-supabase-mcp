@@ -31,6 +31,22 @@ const READONLY_TOOLS = [
     'list_storage_buckets',
     'list_storage_objects',
     'list_realtime_publications',
+    // New read-only tools
+    'list_rls_policies',
+    'get_rls_status',
+    'list_database_functions',
+    'get_function_definition',
+    'list_triggers',
+    'get_trigger_definition',
+    'list_indexes',
+    'get_index_stats',
+    'explain_query',
+    'list_table_columns',
+    'list_foreign_keys',
+    'list_constraints',
+    'list_available_extensions',
+    // Auth session inspection (read-only)
+    'get_current_session',
 ];
 
 /**
@@ -40,12 +56,24 @@ const STANDARD_TOOLS = [
     ...READONLY_TOOLS,
     'create_auth_user',
     'update_auth_user',
+    // New standard tools (read sessions)
+    'list_auth_sessions',
+    // Auth session operations (non-destructive)
+    'signin_with_password',
+    'signup_user',
+    'refresh_session',
+    'signout_user',
     // Notably excludes:
     // - get_service_key (exposes sensitive credentials)
     // - delete_auth_user (destructive)
     // - apply_migration (DDL changes)
     // - generate_typescript_types (external CLI execution)
     // - rebuild_hooks (system modification)
+    // - revoke_session (session termination)
+    // - enable/disable_extension (DDL)
+    // - create/drop_index (DDL)
+    // - enable_rls_on_table, create/drop_rls_policy (DDL)
+    // - storage bucket/object deletion (destructive)
 ];
 
 /**
@@ -58,6 +86,20 @@ const ADMIN_TOOLS = [
     'apply_migration',
     'generate_typescript_types',
     'rebuild_hooks',
+    // New admin tools (mutating/DDL operations)
+    'enable_rls_on_table',
+    'create_rls_policy',
+    'drop_rls_policy',
+    'create_index',
+    'drop_index',
+    'revoke_session',
+    'create_storage_bucket',
+    'delete_storage_bucket',
+    'delete_storage_object',
+    'enable_extension',
+    'disable_extension',
+    // Sudo capability (generates tokens for any user)
+    'generate_user_token',
 ];
 
 /**

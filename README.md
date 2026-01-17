@@ -24,38 +24,119 @@ It avoids the complexities of the official cloud server related to multi-project
 
 ## Features (Implemented Tools)
 
-The server exposes the following tools to MCP clients:
+The server exposes **53 tools** to MCP clients, organized into the following categories:
 
-*   **Schema & Migrations**
-    *   `list_tables`: Lists tables in the database schemas.
-    *   `list_extensions`: Lists installed PostgreSQL extensions.
-    *   `list_migrations`: Lists applied Supabase migrations.
-    *   `apply_migration`: Applies a SQL migration script.
-*   **Database Operations & Stats**
-    *   `execute_sql`: Executes an arbitrary SQL query (via RPC or direct connection).
-    *   `get_database_connections`: Shows active database connections (`pg_stat_activity`).
-    *   `get_database_stats`: Retrieves database statistics (`pg_stat_*`).
-*   **Project Configuration & Keys**
-    *   `get_project_url`: Returns the configured Supabase URL.
-    *   `get_anon_key`: Returns the configured Supabase anon key.
-    *   `get_service_key`: Returns the configured Supabase service role key (if provided).
-    *   `verify_jwt_secret`: Checks if the JWT secret is configured and returns a preview.
-*   **Development & Extension Tools**
-    *   `generate_typescript_types`: Generates TypeScript types from the database schema.
-    *   `rebuild_hooks`: Attempts to restart the `pg_net` worker (if used).
-*   **Auth User Management**
-    *   `list_auth_users`: Lists users from `auth.users`.
-    *   `get_auth_user`: Retrieves details for a specific user.
-    *   `create_auth_user`: Creates a new user (Requires direct DB access, insecure password handling).
-    *   `delete_auth_user`: Deletes a user (Requires direct DB access).
-    *   `update_auth_user`: Updates user details (Requires direct DB access, insecure password handling).
-*   **Storage Insights**
-    *   `list_storage_buckets`: Lists all storage buckets.
-    *   `list_storage_objects`: Lists objects within a specific bucket.
-*   **Realtime Inspection**
-    *   `list_realtime_publications`: Lists PostgreSQL publications (often `supabase_realtime`).
+### Schema & Migrations
+*   `list_tables`: Lists tables in the database schemas.
+*   `list_extensions`: Lists installed PostgreSQL extensions.
+*   `list_migrations`: Lists applied Supabase migrations.
+*   `apply_migration`: Applies a SQL migration script.
+
+### Database Operations & Stats
+*   `execute_sql`: Executes an arbitrary SQL query (via RPC or direct connection).
+*   `get_database_connections`: Shows active database connections (`pg_stat_activity`).
+*   `get_database_stats`: Retrieves database statistics (`pg_stat_*`).
+*   `explain_query`: Gets the execution plan for a SQL query (EXPLAIN).
+
+### Row Level Security (RLS)
+*   `list_rls_policies`: Lists all RLS policies with their definitions.
+*   `get_rls_status`: Checks if RLS is enabled on tables and shows policy count.
+*   `enable_rls_on_table`: Enables RLS on a specific table.
+*   `create_rls_policy`: Creates a new RLS policy.
+*   `drop_rls_policy`: Drops an existing RLS policy.
+
+### Database Functions & Triggers
+*   `list_database_functions`: Lists all user-defined functions/stored procedures.
+*   `get_function_definition`: Gets the full source code of a function.
+*   `list_triggers`: Lists all triggers on tables.
+*   `get_trigger_definition`: Gets the full definition of a trigger including its function.
+
+### Index Management
+*   `list_indexes`: Lists all indexes with definitions and sizes.
+*   `get_index_stats`: Gets detailed statistics for a specific index.
+*   `create_index`: Creates a new index (supports CONCURRENTLY, partial indexes, covering indexes).
+*   `drop_index`: Drops an existing index.
+
+### Schema Metadata
+*   `list_table_columns`: Lists all columns for a table with detailed metadata.
+*   `list_foreign_keys`: Lists all foreign key relationships.
+*   `list_constraints`: Lists all constraints (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK, EXCLUDE).
+
+### Project Configuration & Keys
+*   `get_project_url`: Returns the configured Supabase URL.
+*   `get_anon_key`: Returns the configured Supabase anon key.
+*   `get_service_key`: Returns the configured Supabase service role key (if provided).
+*   `verify_jwt_secret`: Checks if the JWT secret is configured and returns a preview.
+
+### Development & Extension Tools
+*   `generate_typescript_types`: Generates TypeScript types from the database schema.
+*   `rebuild_hooks`: Attempts to restart the `pg_net` worker (if used).
+*   `list_available_extensions`: Lists all PostgreSQL extensions available for installation.
+*   `enable_extension`: Enables (installs) a PostgreSQL extension.
+*   `disable_extension`: Disables (uninstalls) a PostgreSQL extension.
+
+### Auth User Management
+*   `list_auth_users`: Lists users from `auth.users`.
+*   `get_auth_user`: Retrieves details for a specific user.
+*   `create_auth_user`: Creates a new user (Requires direct DB access).
+*   `delete_auth_user`: Deletes or disables a user (Requires direct DB access).
+*   `update_auth_user`: Updates user details (Requires direct DB access).
+
+### Auth Session Management
+*   `list_auth_sessions`: Lists active authentication sessions.
+*   `revoke_session`: Revokes (deletes) an authentication session.
+*   `signin_with_password`: Sign in a user with email/password and get JWT tokens.
+*   `signup_user`: Register a new user and optionally return session tokens.
+*   `refresh_session`: Refresh an expired access token using a refresh token.
+*   `get_current_session`: Validate and decode a JWT access token.
+*   `signout_user`: Sign out a user and invalidate their sessions.
+*   `generate_user_token`: **[Admin/Sudo]** Generate a JWT token for any user without their password.
+
+### Storage Management
+*   `list_storage_buckets`: Lists all storage buckets.
+*   `list_storage_objects`: Lists objects within a specific bucket.
+*   `create_storage_bucket`: Creates a new storage bucket.
+*   `delete_storage_bucket`: Deletes a storage bucket (with optional force delete).
+*   `delete_storage_object`: Deletes a file/object from storage.
+
+### Realtime Inspection
+*   `list_realtime_publications`: Lists PostgreSQL publications (often `supabase_realtime`).
 
 *(Note: `get_logs` was initially planned but skipped due to implementation complexities in a self-hosted environment).*
+
+## Security Profiles
+
+The server supports four security profiles that control which tools are available:
+
+| Profile | Tools | Description |
+|---------|-------|-------------|
+| **readonly** | 28 | Read-only access. Can query and inspect but cannot make any changes. |
+| **standard** | 35 | Standard operations. Includes readonly plus user creation/update, session management, and auth operations. |
+| **admin** | 53 | Full administrative access. All tools enabled including destructive operations and sudo capabilities. |
+| **custom** | Variable | User-defined tool list via `--tools-config` JSON file. |
+
+### Profile Tool Breakdown
+
+**Readonly profile includes:**
+- All list/get operations (tables, indexes, functions, triggers, RLS policies, etc.)
+- Query execution (read-only)
+- Query plan analysis (EXPLAIN)
+- Token validation (`get_current_session`)
+
+**Standard profile adds:**
+- `create_auth_user`, `update_auth_user`
+- `list_auth_sessions`
+- Auth session operations (`signin_with_password`, `signup_user`, `refresh_session`, `signout_user`)
+
+**Admin profile adds:**
+- Credential access (`get_service_key`)
+- Destructive operations (`delete_auth_user`, `revoke_session`, `delete_storage_*`)
+- DDL operations (`apply_migration`, `create_index`, `drop_index`, `enable_extension`, `disable_extension`)
+- RLS management (`enable_rls_on_table`, `create_rls_policy`, `drop_rls_policy`)
+- Storage management (`create_storage_bucket`, `delete_storage_bucket`)
+- Sudo capability (`generate_user_token` - generate JWT for any user)
+
+See [SECURITY.md](./SECURITY.md) for detailed information about security considerations.
 
 ## Setup and Installation
 
