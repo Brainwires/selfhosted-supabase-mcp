@@ -6,6 +6,7 @@ const DeleteStorageObjectInputSchema = z.object({
     bucket_id: z.string().describe('The bucket ID containing the object.'),
     path: z.string().describe('The path/name of the object to delete.'),
     confirm: z.boolean().optional().default(false).describe('Must be true to execute. Without this, returns a preview.'),
+    elevated: z.boolean().optional().default(false).describe('When connected with service_role, must be true to use elevated privileges. Encourages running as unprivileged by default.'),
 });
 type DeleteStorageObjectInput = z.infer<typeof DeleteStorageObjectInputSchema>;
 
@@ -42,6 +43,11 @@ const mcpInputSchema = {
             default: false,
             description: 'Must be true to execute. Without this, returns a preview.',
         },
+        elevated: {
+            type: 'boolean',
+            default: false,
+            description: 'When connected with service_role, must be true to use elevated privileges. Encourages running as unprivileged by default.',
+        },
     },
     required: ['bucket_id', 'path'],
 };
@@ -55,20 +61,28 @@ export const deleteStorageObjectTool = {
 
     execute: async (input: DeleteStorageObjectInput, context: ToolContext) => {
         const client = context.selfhostedClient;
-        const { bucket_id, path, confirm } = input;
+        const { bucket_id, path, confirm, elevated } = input;
 
         if (!client.isPgAvailable()) {
             throw new Error('Direct database connection (DATABASE_URL) is required for deleting storage objects but is not configured or available.');
         }
 
-        // In HTTP mode, restrict destructive storage operations to service_role
+        // In HTTP mode, require service_role + elevated flag for object deletion
         if (context.authContext) {
             const role = context.authContext.role;
             if (role !== 'service_role') {
                 context.log?.(`Storage object deletion attempted by user ${context.authContext.userId} (role: ${role}) - denied`, 'warn');
                 throw new Error('Deleting storage objects via this tool requires service_role privileges. Use the Supabase Storage API with your JWT for user-level object deletion.');
             }
-            context.log?.(`Storage object deletion initiated by ${context.authContext.userId} for ${bucket_id}/${path}`, 'info');
+            // Even with service_role, require explicit elevation
+            if (!elevated) {
+                return {
+                    success: false,
+                    message: 'This operation requires elevated privileges. Set elevated=true to confirm you want to use service_role access for this operation.',
+                    action: 'preview' as const,
+                };
+            }
+            context.log?.(`Storage object deletion initiated by ${context.authContext.userId} for ${bucket_id}/${path} (elevated: true)`, 'info');
         }
 
         try {

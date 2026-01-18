@@ -8,6 +8,7 @@ const CreateStorageBucketInputSchema = z.object({
     file_size_limit: z.number().optional().describe('Maximum file size in bytes.'),
     allowed_mime_types: z.array(z.string()).optional().describe('Allowed MIME types (e.g., ["image/png", "image/jpeg"]).'),
     confirm: z.boolean().optional().default(false).describe('Must be true to execute. Without this, returns a preview.'),
+    elevated: z.boolean().optional().default(false).describe('When connected with service_role, must be true to use elevated privileges. Encourages running as unprivileged by default.'),
 });
 type CreateStorageBucketInput = z.infer<typeof CreateStorageBucketInputSchema>;
 
@@ -52,6 +53,11 @@ const mcpInputSchema = {
             default: false,
             description: 'Must be true to execute. Without this, returns a preview.',
         },
+        elevated: {
+            type: 'boolean',
+            default: false,
+            description: 'When connected with service_role, must be true to use elevated privileges. Encourages running as unprivileged by default.',
+        },
     },
     required: ['name'],
 };
@@ -65,20 +71,29 @@ export const createStorageBucketTool = {
 
     execute: async (input: CreateStorageBucketInput, context: ToolContext) => {
         const client = context.selfhostedClient;
-        const { name, public: isPublic, file_size_limit, allowed_mime_types, confirm } = input;
+        const { name, public: isPublic, file_size_limit, allowed_mime_types, confirm, elevated } = input;
 
         if (!client.isPgAvailable()) {
             throw new Error('Direct database connection (DATABASE_URL) is required for creating storage buckets but is not configured or available.');
         }
 
-        // In HTTP mode, restrict storage bucket creation to service_role
+        // In HTTP mode, require service_role + elevated flag for bucket creation
         if (context.authContext) {
             const role = context.authContext.role;
             if (role !== 'service_role') {
                 context.log?.(`Storage bucket creation attempted by user ${context.authContext.userId} (role: ${role}) - denied`, 'warn');
                 throw new Error('Creating storage buckets requires service_role privileges. This operation is restricted in HTTP mode for non-admin users.');
             }
-            context.log?.(`Storage bucket creation initiated by ${context.authContext.userId} (role: ${role})`, 'info');
+            // Even with service_role, require explicit elevation
+            if (!elevated) {
+                return {
+                    success: false,
+                    message: 'This operation requires elevated privileges. Set elevated=true to confirm you want to use service_role access for this operation.',
+                    action: 'preview' as const,
+                    bucket: { name, public: isPublic, file_size_limit: file_size_limit || null, allowed_mime_types: allowed_mime_types || null },
+                };
+            }
+            context.log?.(`Storage bucket creation initiated by ${context.authContext.userId} (role: ${role}, elevated: true)`, 'info');
         }
 
         // Validate bucket name format

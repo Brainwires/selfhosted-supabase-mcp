@@ -235,9 +235,12 @@ The server requires configuration details for your Supabase instance. These can 
 *   `--tools-config <path>`: Path to a JSON file specifying which tools to enable. Required when using `--security-profile custom`. Format: `{"enabledTools": ["tool_name_1", "tool_name_2"]}`.
 *   `--audit-log <path>`: Path to write audit logs (in addition to stderr).
 *   `--no-audit`: Disable audit logging.
+*   `--user-email <email>` or `MCP_USER_EMAIL=<email>`: Override auto-managed user account with a specific email.
+*   `--user-password <password>` or `MCP_USER_PASSWORD=<password>`: Password for the user account (required if `--user-email` is set).
 
 ### Important Notes:
 
+*   **Auto-Managed User Account:** On startup, the server automatically creates and logs in with a user account for authenticated operations. Credentials are persisted to `~/.config/supabase-mcp/credentials.json`. Use `--user-email` and `--user-password` to override with a specific account.
 *   **`execute_sql` Helper Function:** Many tools rely on a `public.execute_sql` function within your Supabase database for secure and efficient SQL execution via RPC. The server attempts to check for this function on startup. If it's missing *and* a `service-key` *and* `db-url` are provided, it will attempt to create the function.
 *   **Direct Database Access:** Tools interacting directly with privileged schemas (`auth`, `storage`) or system catalogs (`pg_catalog`) require the `DATABASE_URL` to be configured.
 *   **HTTP Mode Requirements:** When using `--transport http`, the `--jwt-secret` is required to validate client JWT tokens.

@@ -6,6 +6,7 @@ const DeleteStorageBucketInputSchema = z.object({
     bucket_id: z.string().describe('The ID/name of the bucket to delete.'),
     force: z.boolean().optional().default(false).describe('Delete bucket even if it contains objects (deletes all objects first).'),
     confirm: z.boolean().optional().default(false).describe('Must be true to execute. Without this, returns a preview.'),
+    elevated: z.boolean().optional().default(false).describe('When connected with service_role, must be true to use elevated privileges. Encourages running as unprivileged by default.'),
 });
 type DeleteStorageBucketInput = z.infer<typeof DeleteStorageBucketInputSchema>;
 
@@ -42,6 +43,11 @@ const mcpInputSchema = {
             default: false,
             description: 'Must be true to execute. Without this, returns a preview.',
         },
+        elevated: {
+            type: 'boolean',
+            default: false,
+            description: 'When connected with service_role, must be true to use elevated privileges. Encourages running as unprivileged by default.',
+        },
     },
     required: ['bucket_id'],
 };
@@ -55,21 +61,28 @@ export const deleteStorageBucketTool = {
 
     execute: async (input: DeleteStorageBucketInput, context: ToolContext) => {
         const client = context.selfhostedClient;
-        const { bucket_id, force, confirm } = input;
+        const { bucket_id, force, confirm, elevated } = input;
 
         if (!client.isPgAvailable()) {
             throw new Error('Direct database connection (DATABASE_URL) is required for deleting storage buckets but is not configured or available.');
         }
 
-        // In HTTP mode, restrict destructive storage operations to service_role
-        // Regular authenticated users should not be able to delete buckets
+        // In HTTP mode, require service_role + elevated flag for bucket deletion
         if (context.authContext) {
             const role = context.authContext.role;
             if (role !== 'service_role') {
                 context.log?.(`Storage bucket deletion attempted by user ${context.authContext.userId} (role: ${role}) - denied`, 'warn');
                 throw new Error('Deleting storage buckets requires service_role privileges. This operation is restricted in HTTP mode for non-admin users.');
             }
-            context.log?.(`Storage bucket deletion initiated by ${context.authContext.userId} (role: ${role})`, 'info');
+            // Even with service_role, require explicit elevation
+            if (!elevated) {
+                return {
+                    success: false,
+                    message: 'This operation requires elevated privileges. Set elevated=true to confirm you want to use service_role access for this operation.',
+                    action: 'preview' as const,
+                };
+            }
+            context.log?.(`Storage bucket deletion initiated by ${context.authContext.userId} (role: ${role}, elevated: true)`, 'info');
         }
 
         try {

@@ -3,15 +3,17 @@ import type { AuthContext } from '../tools/types.js';
 
 /**
  * JWT payload structure for Supabase access tokens.
+ * Note: `sub` is optional because service_role tokens don't have a user ID.
  */
 export interface SupabaseJwtPayload {
-    sub: string;
+    sub?: string;
     email?: string;
     role?: string;
     session_id?: string;
     exp: number;
     iat: number;
     aud: string;
+    iss?: string;
     app_metadata?: Record<string, unknown>;
     user_metadata?: Record<string, unknown>;
 }
@@ -67,12 +69,27 @@ export class AuthMiddleware {
                 algorithms: ['HS256'],
             }) as SupabaseJwtPayload;
 
-            // Verify audience is 'authenticated' (standard Supabase JWT audience)
+            // Handle service_role and anon tokens (no sub claim, role in payload)
+            // These tokens have role: 'service_role' or 'anon' and no user ID
+            if (decoded.role === 'service_role' || decoded.role === 'anon') {
+                return {
+                    userId: decoded.role, // Use role as identifier since there's no user
+                    email: null,
+                    role: decoded.role,
+                    sessionId: undefined,
+                    accessToken: token,
+                    expiresAt: decoded.exp,
+                    appMetadata: undefined,
+                    userMetadata: undefined,
+                };
+            }
+
+            // For user tokens, verify audience is 'authenticated'
             if (decoded.aud !== 'authenticated') {
                 throw new AuthenticationError(`Invalid token audience: ${decoded.aud}`);
             }
 
-            // Verify required claims
+            // User tokens must have a sub claim
             if (!decoded.sub) {
                 throw new AuthenticationError('Token missing required "sub" claim');
             }

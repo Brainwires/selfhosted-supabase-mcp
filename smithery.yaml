@@ -24,9 +24,23 @@ startCommand:
       supabaseAuthJwtSecret:
         type: string
         description: Supabase JWT secret (optional)
+      securityProfile:
+        type: string
+        enum:
+          - readonly
+          - standard
+          - admin
+          - custom
+        description: Security profile controlling which tools are enabled (default: admin)
       toolsConfig:
         type: string
-        description: Path to tools config JSON (optional)
+        description: Path to tools config JSON (required when securityProfile is custom)
+      userEmail:
+        type: string
+        description: Override auto-managed user account with specific email (optional)
+      userPassword:
+        type: string
+        description: Password for the user account (required if userEmail is set)
   commandFunction:
     # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
     |-
@@ -48,6 +62,15 @@ startCommand:
       if (config.toolsConfig) {
         args.push('--tools-config', config.toolsConfig);
       }
+      if (config.securityProfile) {
+        args.push('--security-profile', config.securityProfile);
+      }
+      if (config.userEmail) {
+        args.push('--user-email', config.userEmail);
+      }
+      if (config.userPassword) {
+        args.push('--user-password', config.userPassword);
+      }
       return { command: 'node', args };
     }
   exampleConfig:
@@ -56,4 +79,7 @@ startCommand:
     supabaseServiceRoleKey: example-service-key
     databaseUrl: postgresql://postgres:password@localhost:5432/postgres
     supabaseAuthJwtSecret: example-jwt-secret
-    toolsConfig: ./mcp-tools.json
+    securityProfile: admin
+    # userEmail and userPassword are optional - if not set, server auto-manages a user account
+    # userEmail: my-user@example.com
+    # userPassword: my-password

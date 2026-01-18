@@ -20,6 +20,9 @@ export interface CliOptions {
     toolsConfig?: string;
     auditLog?: string;
     audit: boolean;
+    // Auto-managed user account options (override auto-created account)
+    userEmail?: string;
+    userPassword?: string;
 }
 
 /**
@@ -44,6 +47,8 @@ export function parseCliOptions(): CliOptions {
         .option('--tools-config <path>', 'Path to JSON file for custom tool configuration')
         .option('--audit-log <path>', 'Path to write audit logs (in addition to stderr)')
         .option('--no-audit', 'Disable audit logging')
+        .option('--user-email <email>', 'Override auto-managed user account with specific email', process.env.MCP_USER_EMAIL)
+        .option('--user-password <password>', 'Password for the user account (required if --user-email is set)', process.env.MCP_USER_PASSWORD)
         .addHelpText('after', `\n${getProfileDescriptions()}`)
         .parse(process.argv);
 
@@ -63,6 +68,8 @@ export function parseCliOptions(): CliOptions {
         toolsConfig: opts.toolsConfig,
         auditLog: opts.auditLog,
         audit: opts.audit !== false,
+        userEmail: opts.userEmail,
+        userPassword: opts.userPassword,
     };
 }
 
@@ -91,5 +98,10 @@ export function validateCliOptions(options: CliOptions): void {
     // Validate port
     if (options.transport === 'http' && (options.port < 1 || options.port > 65535)) {
         throw new Error(`Invalid port: ${options.port}. Must be between 1 and 65535.`);
+    }
+
+    // If user email is provided, password is required
+    if (options.userEmail && !options.userPassword) {
+        throw new Error('User password is required when --user-email is specified. Use --user-password or MCP_USER_PASSWORD.');
     }
 }

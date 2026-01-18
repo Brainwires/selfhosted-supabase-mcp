@@ -18,8 +18,9 @@ import { HttpMcpServer } from './server/http-server.js';
 import { parseCliOptions, validateCliOptions, type CliOptions } from './config/cli.js';
 import { loadSecurityConfig, filterTools } from './config/security.js';
 import { availableTools, buildCapabilities, getAvailableToolNames, type AppTool } from './tools/registry.js';
-import type { ToolContext } from './tools/types.js';
+import type { ToolContext, AuthContext } from './tools/types.js';
 import { AuditLogger } from './audit-logger.js';
+import { ServerAuthManager } from './auth/index.js';
 
 async function main() {
     const options = parseCliOptions();
@@ -55,6 +56,31 @@ async function main() {
         });
         console.error('Supabase client initialized successfully.');
 
+        // Initialize server authentication (auto-managed user account)
+        const serverAuth = new ServerAuthManager({
+            userEmail: options.userEmail,
+            userPassword: options.userPassword,
+            serviceRoleKey: options.serviceKey,
+        });
+
+        const authState = await serverAuth.initialize(selfhostedClient.supabase);
+        if (!authState.isAuthenticated) {
+            console.error(`WARNING: Server authentication failed: ${authState.error}`);
+            console.error('Tools will operate without a logged-in user identity.');
+        }
+
+        // Build server auth context from the logged-in session
+        const serverAuthContext: AuthContext | undefined = authState.session ? {
+            userId: authState.session.userId,
+            email: authState.session.email,
+            role: 'authenticated',
+            sessionId: undefined, // Server doesn't track session ID the same way
+            accessToken: authState.session.accessToken,
+            expiresAt: authState.session.expiresAt,
+            appMetadata: undefined,
+            userMetadata: undefined,
+        } : undefined;
+
         // Load security configuration and filter tools
         const securityConfig = loadSecurityConfig(
             options.securityProfile,
@@ -73,15 +99,15 @@ async function main() {
                 { capabilities }
             );
 
-            setupRequestHandlers(server, registeredTools, selfhostedClient, options, auditLogger);
+            setupRequestHandlers(server, registeredTools, selfhostedClient, options, auditLogger, serverAuthContext);
             return server;
         };
 
         // Start appropriate transport
         if (options.transport === 'http') {
-            await startHttpTransport(options, createMcpServer);
+            await startHttpTransport(options, createMcpServer, serverAuth);
         } else {
-            await startStdioTransport(createMcpServer());
+            await startStdioTransport(createMcpServer(), serverAuth);
         }
 
     } catch (error) {
@@ -98,7 +124,8 @@ function setupRequestHandlers(
     registeredTools: Record<string, AppTool>,
     selfhostedClient: SelfhostedSupabaseClient,
     options: CliOptions,
-    auditLogger: AuditLogger
+    auditLogger: AuditLogger,
+    serverAuthContext?: AuthContext
 ): void {
     // List tools handler
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -124,10 +151,11 @@ function setupRequestHandlers(
                 parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments);
             }
 
-            // Extract AuthContext from MCP SDK's authInfo (set by HTTP server middleware)
-            // This enables RLS enforcement in HTTP mode - tools can check context.authContext
-            // to enforce per-user access restrictions
-            const authContext = extra.authInfo?.extra?.authContext as ToolContext['authContext'] | undefined;
+            // Determine auth context:
+            // 1. HTTP mode may provide per-request authContext via MCP SDK's authInfo
+            // 2. Otherwise, use the server's auto-managed user identity
+            const httpAuthContext = extra.authInfo?.extra?.authContext as ToolContext['authContext'] | undefined;
+            const authContext = httpAuthContext ?? serverAuthContext;
 
             const context: ToolContext = {
                 selfhostedClient,
@@ -176,11 +204,16 @@ function setupRequestHandlers(
 /**
  * Starts the server with stdio transport.
  */
-async function startStdioTransport(server: Server): Promise<void> {
+async function startStdioTransport(server: Server, serverAuth: ServerAuthManager): Promise<void> {
     console.error('Starting MCP Server in stdio mode...');
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error('MCP Server connected to stdio.');
+
+    // Cleanup on exit
+    process.on('exit', () => {
+        serverAuth.cleanup();
+    });
 }
 
 /**
@@ -188,7 +221,8 @@ async function startStdioTransport(server: Server): Promise<void> {
  */
 async function startHttpTransport(
     options: CliOptions,
-    mcpServerFactory: () => Server
+    mcpServerFactory: () => Server,
+    serverAuth: ServerAuthManager
 ): Promise<void> {
     console.error(`Starting MCP Server in HTTP mode on ${options.host}:${options.port}...`);
 
@@ -206,12 +240,14 @@ async function startHttpTransport(
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
         console.error('Shutting down...');
+        serverAuth.cleanup();
         await httpServer.stop();
         process.exit(0);
     });
 
     process.on('SIGTERM', async () => {
         console.error('Shutting down...');
+        serverAuth.cleanup();
         await httpServer.stop();
         process.exit(0);
     });

@@ -84,6 +84,20 @@ Authorization: Bearer <JWT>
 
 The JWT is validated against the configured `--jwt-secret` (SUPABASE_AUTH_JWT_SECRET).
 
+### Supported Token Types
+
+The server accepts three types of Supabase JWTs:
+
+| Token Type | Use Case | RLS Behavior |
+|------------|----------|--------------|
+| **User JWT** | Debug as a specific user | RLS enforced, scoped to user |
+| **service_role** | Admin operations (like sudo) | Bypasses RLS, full access |
+| **anon** | Public/anonymous access | RLS enforced, no user context |
+
+**Typical workflow**: Connect with a user JWT for normal debugging. When you need to perform administrative operations (bypass RLS, manage storage buckets, etc.), reconnect with the service_role key.
+
+This is similar to running unprivileged by default on an OS and using `sudo` when needed.
+
 ### RLS Enforcement (Per-User Access)
 
 In HTTP mode, certain tools enforce Row-Level Security based on the authenticated user:
@@ -96,14 +110,32 @@ In HTTP mode, certain tools enforce Row-Level Security based on the authenticate
 
 **Example**: When an authenticated user calls `list_auth_sessions`, they only see sessions for their own `user_id`, regardless of any `user_id` filter parameter.
 
-### Service Role Restrictions
+### Service Role with Elevation
 
-In HTTP mode, these operations require a `service_role` JWT (not regular `authenticated` role):
-- `create_storage_bucket`
-- `delete_storage_bucket`
-- `delete_storage_object`
+In HTTP mode, certain privileged operations require both a `service_role` JWT **and** an explicit `elevated: true` parameter:
 
-This prevents regular users from modifying shared infrastructure.
+| Tool | Requires `elevated: true` |
+|------|---------------------------|
+| `create_storage_bucket` | Yes (to create) |
+| `delete_storage_bucket` | Yes (to delete) |
+| `delete_storage_object` | Yes (to delete) |
+| `list_auth_sessions` | Yes (to view other users' sessions) |
+| `revoke_session` | Yes (to revoke other users' sessions) |
+
+This two-step confirmation prevents accidental privileged operations. Even when connected with `service_role`, the AI or user must explicitly opt-in to elevated access for each operation.
+
+**Example workflow**:
+```json
+// First attempt - denied without elevation
+{ "name": "my-bucket", "confirm": true }
+// Response: "This operation requires elevated privileges. Set elevated=true..."
+
+// Second attempt - with elevation
+{ "name": "my-bucket", "confirm": true, "elevated": true }
+// Response: "Successfully created bucket..."
+```
+
+This encourages running unprivileged by default, only elevating when explicitly needed.
 
 ### Session Limits
 
@@ -282,6 +314,8 @@ The following fields are automatically redacted in logs:
 | `MCP_TRANSPORT` | Transport mode: `stdio` or `http` |
 | `MCP_PORT` | HTTP port (default: 3100) |
 | `MCP_HOST` | HTTP host (default: 127.0.0.1) |
+| `MCP_USER_EMAIL` | Override auto-managed user account with specific email |
+| `MCP_USER_PASSWORD` | Password for the user account (required if email is set) |
 
 ## Reporting Security Issues
 
