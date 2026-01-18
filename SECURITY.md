@@ -19,7 +19,7 @@ The server supports two transport modes with different security characteristics:
 
 ```bash
 # Start in HTTP mode
-node dist/index.js --transport http --port 3100 --jwt-secret $JWT_SECRET ...
+bun run dist/index.js --transport http --port 3100 --jwt-secret $JWT_SECRET ...
 ```
 
 ## Security Profiles
@@ -37,12 +37,15 @@ Only allows querying data, no mutations. Safe for exploration and debugging.
 - Storage (read): `list_storage_buckets`, `list_storage_objects`
 - Realtime: `list_realtime_publications`
 - Schema metadata: `list_rls_policies`, `get_rls_status`, `list_database_functions`, `get_function_definition`, `list_triggers`, `get_trigger_definition`, `list_indexes`, `get_index_stats`, `explain_query`, `list_table_columns`, `list_foreign_keys`, `list_constraints`, `list_available_extensions`
+- pg_cron: `list_cron_jobs`
+- pgvector: `list_vector_indexes`
+- Edge Functions: `list_edge_functions`, `list_edge_function_logs`
 
 ### `standard`
 Common operations without dangerous capabilities. Good for development.
 
 **Includes everything in `readonly`, plus:**
-- User management: `user_admin` (list, get, create, update, delete)
+- User management: `list_auth_users`, `get_auth_user`, `create_auth_user`, `update_auth_user`, `delete_auth_user`
 - Session tools: `list_auth_sessions`
 - Auth flows: `signin_with_password`, `signup_user`, `signout_user`
 
@@ -58,13 +61,16 @@ Common operations without dangerous capabilities. Good for development.
 ### `admin`
 Full access to all tools. Use only when necessary and with trusted users.
 
-**Includes everything in `standard`, plus all excluded tools.**
+**Includes everything in `standard`, plus all excluded tools above, and:**
+- pg_cron: `get_cron_job_history`
+- pgvector: `get_vector_index_stats`
+- Edge Functions: `get_edge_function_details`
 
 ### `custom`
 Use `--tools-config` to specify exactly which tools to enable.
 
 ```bash
-node dist/index.js --security-profile custom --tools-config ./my-tools.json ...
+bun run dist/index.js --security-profile custom --tools-config ./my-tools.json ...
 ```
 
 Config file format:
@@ -177,20 +183,19 @@ Example:
 }
 ```
 
-### User Management (`user_admin`)
+### User Management (`delete_auth_user`)
 
-Consolidated tool for all user operations. Requires explicit confirmation for deletions:
+The `delete_auth_user` tool requires explicit confirmation:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `operation` | required | `list`, `get`, `create`, `update`, or `delete` |
+| `user_id` | required | UUID of the user to delete |
 | `confirm` | `false` | Must be `true` to actually delete |
 | `disable_instead` | `false` | Disable the user instead of deleting |
 
 Example (soft delete):
 ```json
 {
-  "operation": "delete",
   "user_id": "...",
   "confirm": true,
   "disable_instead": true
@@ -236,13 +241,13 @@ The server logs all tool executions for security auditing.
 
 ```bash
 # Audit logging is enabled by default
-node dist/index.js ...
+bun run dist/index.js ...
 
 # Write audit logs to a file (in addition to stderr)
-node dist/index.js --audit-log /var/log/mcp-audit.log ...
+bun run dist/index.js --audit-log /var/log/mcp-audit.log ...
 
 # Disable audit logging entirely
-node dist/index.js --no-audit ...
+bun run dist/index.js --no-audit ...
 ```
 
 ### Log Format

@@ -43,6 +43,13 @@ const READONLY_TOOLS = [
     'list_foreign_keys',
     'list_constraints',
     'list_available_extensions',
+    // pg_cron (read-only inspection)
+    'list_cron_jobs',
+    // pgvector (read-only inspection)
+    'list_vector_indexes',
+    // Edge Functions (read-only inspection)
+    'list_edge_functions',
+    'list_edge_function_logs',
 ];
 
 /**
@@ -51,8 +58,12 @@ const READONLY_TOOLS = [
  */
 const STANDARD_TOOLS = [
     ...READONLY_TOOLS,
-    // Auth user admin (list, get, create, update, delete via operation param)
-    'user_admin',
+    // Auth user management (individual tools)
+    'list_auth_users',
+    'get_auth_user',
+    'create_auth_user',
+    'update_auth_user',
+    'delete_auth_user',
     // Auth session tools (RLS enforced in HTTP mode)
     'list_auth_sessions',
     // Auth flow tools
@@ -98,6 +109,12 @@ const ADMIN_TOOLS = [
     // Extension management
     'enable_extension',
     'disable_extension',
+    // pg_cron (detailed history - admin only)
+    'get_cron_job_history',
+    // pgvector (detailed stats - admin only)
+    'get_vector_index_stats',
+    // Edge Functions (detailed info - admin only)
+    'get_edge_function_details',
 ];
 
 /**

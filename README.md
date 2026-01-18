@@ -26,7 +26,7 @@ It avoids the complexities of the official cloud server related to multi-project
 
 ## Features (Implemented Tools)
 
-The server exposes **46 tools** to MCP clients, organized into the following categories:
+The server exposes **57 tools** to MCP clients, organized into the following categories:
 
 ### Schema & Migrations
 *   `list_tables`: Lists tables in the database schemas.
@@ -78,12 +78,11 @@ The server exposes **46 tools** to MCP clients, organized into the following cat
 *   `disable_extension`: Disables (uninstalls) a PostgreSQL extension.
 
 ### Auth User Management
-*   `user_admin`: Consolidated tool for managing users in `auth.users`. Operations:
-    - `list`: List users with pagination
-    - `get`: Get a specific user by ID
-    - `create`: Create a new user with email/password
-    - `update`: Update user fields (email, password, role, metadata)
-    - `delete`: Delete or disable a user (with confirmation)
+*   `list_auth_users`: Lists users from `auth.users` with pagination.
+*   `get_auth_user`: Gets a single user by ID.
+*   `create_auth_user`: Creates a new user with email/password.
+*   `update_auth_user`: Updates user fields (email, password, role, metadata).
+*   `delete_auth_user`: Deletes or disables a user (with confirmation).
 
 ### Auth Session Management
 *   `list_auth_sessions`: Lists active authentication sessions. In HTTP mode, users can only see their own sessions (RLS enforced).
@@ -105,6 +104,21 @@ The server exposes **46 tools** to MCP clients, organized into the following cat
 ### Realtime Inspection
 *   `list_realtime_publications`: Lists PostgreSQL publications (often `supabase_realtime`).
 
+### pg_cron Extension Tools
+*   `list_cron_jobs`: Lists all scheduled cron jobs. Requires pg_cron extension.
+*   `get_cron_job_history`: Gets execution history for cron jobs with status and timing.
+
+### pgvector Extension Tools
+*   `list_vector_indexes`: Lists all vector indexes (IVFFlat, HNSW) with their parameters.
+*   `get_vector_index_stats`: Gets usage statistics and size information for vector indexes.
+
+### Edge Function Inspection
+*   `list_edge_functions`: Lists edge functions from metadata tracking table.
+*   `get_edge_function_details`: Gets function details and recent execution logs.
+*   `list_edge_function_logs`: Lists execution logs from function_edge_logs table.
+
+> **Note:** Edge function tools require a user-created `public.edge_functions_metadata` table. See tool documentation for setup instructions.
+
 ## Transport Modes
 
 ### Stdio Mode (Default)
@@ -112,7 +126,7 @@ The server exposes **46 tools** to MCP clients, organized into the following cat
 Traditional MCP transport for IDE integrations. The server communicates via standard input/output.
 
 ```bash
-node dist/index.js --url http://localhost:8000 --anon-key <key>
+bun run dist/index.js --url http://localhost:8000 --anon-key <key>
 ```
 
 ### HTTP Mode
@@ -120,7 +134,7 @@ node dist/index.js --url http://localhost:8000 --anon-key <key>
 Stateful HTTP/SSE server with Supabase JWT authentication. Clients authenticate by passing their Supabase JWT in the `Authorization` header.
 
 ```bash
-node dist/index.js \
+bun run dist/index.js \
   --transport http \
   --port 3100 \
   --url http://localhost:8000 \
@@ -148,9 +162,9 @@ The server supports four security profiles that control which tools are availabl
 
 | Profile | Tools | Description |
 |---------|-------|-------------|
-| **readonly** | 25 | Read-only access. Can query and inspect but cannot make any changes. |
-| **standard** | 30 | Standard operations. Includes readonly plus user management and auth operations. |
-| **admin** | 46 | Full administrative access. All tools enabled including destructive operations. |
+| **readonly** | 33 | Read-only access. Can query and inspect but cannot make any changes. |
+| **standard** | 42 | Standard operations. Includes readonly plus user management and auth operations. |
+| **admin** | 57 | Full administrative access. All tools enabled including destructive operations. |
 | **custom** | Variable | User-defined tool list via `--tools-config` JSON file. |
 
 ### Profile Tool Breakdown
@@ -161,9 +175,12 @@ The server supports four security profiles that control which tools are availabl
 - Query plan analysis (EXPLAIN)
 - Storage bucket/object listing
 - Realtime publication listing
+- pg_cron job listing
+- pgvector index listing
+- Edge function and log listing
 
 **Standard profile adds:**
-- `user_admin` (list, get, create, update, delete operations)
+- User management (`list_auth_users`, `get_auth_user`, `create_auth_user`, `update_auth_user`, `delete_auth_user`)
 - `list_auth_sessions`
 - Auth flow operations (`signin_with_password`, `signup_user`, `signout_user`)
 
@@ -175,6 +192,9 @@ The server supports four security profiles that control which tools are availabl
 - RLS management (`enable_rls_on_table`, `create_rls_policy`, `drop_rls_policy`)
 - Storage management (`create_storage_bucket`, `delete_storage_bucket`, `delete_storage_object`)
 - Development tools (`generate_typescript_types`, `rebuild_hooks`)
+- pg_cron history (`get_cron_job_history`)
+- pgvector stats (`get_vector_index_stats`)
+- Edge function details (`get_edge_function_details`)
 
 See [SECURITY.md](./SECURITY.md) for detailed information about security considerations.
 
@@ -190,9 +210,14 @@ npx -y @smithery/cli install @HenkDz/selfhosted-supabase-mcp --client claude
 
 ### Prerequisites
 
-*   Node.js (Version 20.x or later required)
-*   npm (usually included with Node.js)
+*   [Bun](https://bun.sh) (Version 1.0 or later) - Fast JavaScript runtime, bundler, and package manager
 *   Access to your self-hosted Supabase instance (URL, keys, potentially direct DB connection string).
+
+### Installing Bun
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
 
 ### Steps
 
@@ -203,11 +228,11 @@ npx -y @smithery/cli install @HenkDz/selfhosted-supabase-mcp --client claude
     ```
 2.  **Install dependencies:**
     ```bash
-    npm install
+    bun install
     ```
 3.  **Build the project:**
     ```bash
-    npm run build
+    bun run build
     ```
     This compiles the TypeScript code to JavaScript in the `dist` directory.
 
@@ -251,20 +276,20 @@ The server requires configuration details for your Supabase instance. These can 
 
 ```bash
 # Using CLI arguments
-node dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --db-url postgresql://postgres:password@localhost:5432/postgres
+bun run dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --db-url postgresql://postgres:password@localhost:5432/postgres
 
 # Using environment variables
 export SUPABASE_URL=http://localhost:8000
 export SUPABASE_ANON_KEY=<your-anon-key>
 export DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
-node dist/index.js
+bun run dist/index.js
 ```
 
 ### HTTP Mode (Web Clients)
 
 ```bash
 # Start HTTP server
-node dist/index.js \
+bun run dist/index.js \
   --transport http \
   --port 3100 \
   --url http://localhost:8000 \
@@ -302,8 +327,9 @@ Below are examples of how to configure popular MCP clients to use this self-host
     {
       "mcpServers": {
         "selfhosted-supabase": {
-          "command": "node",
+          "command": "bun",
           "args": [
+            "run",
             "<path-to-dist/index.js>",
             "--url", "<your-supabase-url>",
             "--anon-key", "<your-anon-key>",
@@ -333,8 +359,8 @@ Below are examples of how to configure popular MCP clients to use this self-host
       ],
       "servers": {
         "selfhosted-supabase": {
-          "command": "node",
-          "args": ["${input:sh-supabase-server-path}"],
+          "command": "bun",
+          "args": ["run", "${input:sh-supabase-server-path}"],
           "env": {
             "SUPABASE_URL": "${input:sh-supabase-url}",
             "SUPABASE_ANON_KEY": "${input:sh-supabase-anon-key}",
@@ -349,14 +375,15 @@ Below are examples of how to configure popular MCP clients to use this self-host
 
 ### Other Clients (Windsurf, Cline, Claude)
 
-Adapt the configuration structure shown for Cursor, replacing the `command` and `args` with the `node` command and arguments:
+Adapt the configuration structure shown for Cursor, replacing the `command` and `args` with the `bun` command:
 
 ```json
 {
   "mcpServers": {
     "selfhosted-supabase": {
-      "command": "node",
+      "command": "bun",
       "args": [
+        "run",
         "<path-to-dist/index.js>",
         "--url", "<your-supabase-url>",
         "--anon-key", "<your-anon-key>",
@@ -373,10 +400,23 @@ Consult the specific documentation for each client on where to place the configu
 
 ## Development
 
-*   **Language:** TypeScript
-*   **Build:** `tsup` (bundler)
-*   **Dependencies:** Managed via `npm` (`package.json`)
+*   **Runtime:** [Bun](https://bun.sh) - Fast JavaScript runtime
+*   **Language:** TypeScript (native support in Bun)
+*   **Build:** Bun bundler (`bun build`)
+*   **Test:** Bun test runner (`bun test`)
+*   **Package Manager:** Bun (`bun install`)
 *   **Core Libraries:** `@supabase/supabase-js`, `pg` (node-postgres), `zod` (validation), `commander` (CLI args), `@modelcontextprotocol/sdk` (MCP server framework), `jsonwebtoken` (JWT validation), `express` (HTTP server).
+
+### Scripts
+
+```bash
+bun run build        # Build the project
+bun run dev          # Start in watch mode
+bun run start        # Run the built server
+bun test             # Run tests
+bun test --coverage  # Run tests with coverage
+bun run typecheck    # Type check without emitting
+```
 
 ## License
 

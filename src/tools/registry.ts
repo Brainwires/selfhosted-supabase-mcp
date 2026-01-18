@@ -54,8 +54,12 @@ import { listTableColumnsTool } from './list_table_columns.js';
 import { listForeignKeysTool } from './list_foreign_keys.js';
 import { listConstraintsTool } from './list_constraints.js';
 
-// Auth Users (consolidated admin tool)
-import { userAdminTool } from './user_admin.js';
+// Auth Users (individual tools)
+import { listAuthUsersTool } from './list_auth_users.js';
+import { getAuthUserTool } from './get_auth_user.js';
+import { createAuthUserTool } from './create_auth_user.js';
+import { updateAuthUserTool } from './update_auth_user.js';
+import { deleteAuthUserTool } from './delete_auth_user.js';
 
 // Auth Sessions (RLS enforced in HTTP mode)
 import { listAuthSessionsTool } from './list_auth_sessions.js';
@@ -81,6 +85,19 @@ import listRealtimePublicationsTool from './list_realtime_publications.js';
 import { listAvailableExtensionsTool } from './list_available_extensions.js';
 import { enableExtensionTool } from './enable_extension.js';
 import { disableExtensionTool } from './disable_extension.js';
+
+// pg_cron Tools
+import { listCronJobsTool } from './list_cron_jobs.js';
+import { getCronJobHistoryTool } from './get_cron_job_history.js';
+
+// pgvector Tools
+import { listVectorIndexesTool } from './list_vector_indexes.js';
+import { getVectorIndexStatsTool } from './get_vector_index_stats.js';
+
+// Edge Function Tools
+import { listEdgeFunctionsTool } from './list_edge_functions.js';
+import { getEdgeFunctionDetailsTool } from './get_edge_function_details.js';
+import { listEdgeFunctionLogsTool } from './list_edge_function_logs.js';
 
 /**
  * Structure for tool definitions used by MCP.
@@ -157,8 +174,12 @@ export const availableTools: Record<string, AppTool> = {
     [listForeignKeysTool.name]: listForeignKeysTool as AppTool,
     [listConstraintsTool.name]: listConstraintsTool as AppTool,
 
-    // Auth Users (consolidated admin tool)
-    [userAdminTool.name]: userAdminTool as AppTool,
+    // Auth Users (individual tools)
+    [listAuthUsersTool.name]: listAuthUsersTool as AppTool,
+    [getAuthUserTool.name]: getAuthUserTool as AppTool,
+    [createAuthUserTool.name]: createAuthUserTool as AppTool,
+    [updateAuthUserTool.name]: updateAuthUserTool as AppTool,
+    [deleteAuthUserTool.name]: deleteAuthUserTool as AppTool,
 
     // Auth Sessions (RLS enforced in HTTP mode)
     [listAuthSessionsTool.name]: listAuthSessionsTool as AppTool,
@@ -184,6 +205,19 @@ export const availableTools: Record<string, AppTool> = {
     [listAvailableExtensionsTool.name]: listAvailableExtensionsTool as AppTool,
     [enableExtensionTool.name]: enableExtensionTool as AppTool,
     [disableExtensionTool.name]: disableExtensionTool as AppTool,
+
+    // pg_cron Tools
+    [listCronJobsTool.name]: listCronJobsTool as AppTool,
+    [getCronJobHistoryTool.name]: getCronJobHistoryTool as AppTool,
+
+    // pgvector Tools
+    [listVectorIndexesTool.name]: listVectorIndexesTool as AppTool,
+    [getVectorIndexStatsTool.name]: getVectorIndexStatsTool as AppTool,
+
+    // Edge Function Tools
+    [listEdgeFunctionsTool.name]: listEdgeFunctionsTool as AppTool,
+    [getEdgeFunctionDetailsTool.name]: getEdgeFunctionDetailsTool as AppTool,
+    [listEdgeFunctionLogsTool.name]: listEdgeFunctionLogsTool as AppTool,
 };
 
 /**
