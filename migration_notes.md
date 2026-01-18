@@ -6,6 +6,7 @@ This document summarizes the findings and decisions made while attempting to ada
 
 -   **Target:** Self-hosted Supabase instances.
 -   **Scope:** Single project environment.
+-   **Runtime:** Bun (v1.3+) - migrated from Node.js for faster startup and built-in TypeScript support.
 -   **Authentication:** Supabase URL and Anon Key required. Service Role Key optional (but recommended for certain operations like auto-creating helper functions).
 -   **Configuration:** Server should accept URL/Keys via CLI arguments (e.g., using `commander`) or environment variables (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`). Also needs `DATABASE_URL` for direct DB fallback/transactions.
 
@@ -95,8 +96,17 @@ The following tools from the original cloud server are not applicable and should
 
 ## Dependencies
 
--   **Core:** `@supabase/supabase-js`, `pg`, `zod`, `commander`, `@modelcontextprotocol/sdk`.
--   **Potential Native Dependency:** `libpg-query` (likely via `@supabase/sql-to-rest` or similar) might require C++ build tools (`node-gyp`, Visual Studio Desktop C++ workload on Windows) if pre-built binaries are unavailable for the target platform/Node version. Be mindful of this during setup.
+-   **Runtime:** Bun v1.3+ (replaces Node.js)
+-   **Core:** `@supabase/supabase-js`, `pg`, `zod` (v4.x), `commander`, `@modelcontextprotocol/sdk`.
+-   **Dev:** `@types/bun`, `@types/node`, `@types/pg`, `typescript`
+
+## Zod v4 Compatibility Notes
+
+Updated for Zod v4 breaking changes:
+-   `z.ZodError.errors` → `z.ZodError.issues`
+-   `z.record(z.unknown())` → `z.record(z.string(), z.unknown())`
+-   `z.string().optional()` → `z.optional(z.string())` for better type inference
+-   `z.coerce` API changes handled with `z.union().transform()`
 
 ## Useful Logic to Re-use
 
@@ -110,4 +120,4 @@ Adapting the official cloud MCP server proved overly complex due to:
 -   Need for extensive refactoring of options and logic paths.
 -   Inherited build complexities and dependencies not strictly necessary for a minimal self-hosted server.
 
-Building from scratch allows for a cleaner, more focused implementation tailored specifically to the self-hosted use case. 
+Building from scratch allows for a cleaner, more focused implementation tailored specifically to the self-hosted use case.

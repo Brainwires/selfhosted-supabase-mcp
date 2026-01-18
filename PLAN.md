@@ -5,7 +5,8 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
 ## Progress Tracking
 
 -   [x] Project Setup (package.json, tsconfig.json, dependencies, directories)
--   [ ] Define Core Types (`src/types/`)
+-   [x] Bun Migration (replaced Node.js/npm with Bun runtime)
+-   [x] Define Core Types (`src/types/`)
 -   [x] Implement `SelfhostedSupabaseClient` (`src/client/`)
     -   [x] Basic connection (`@supabase/supabase-js`)
     -   [x] RPC `execute_sql` function call logic
@@ -36,17 +37,17 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
     -   [x] **Development & Extension Tools**
         -   [x] `generate_typescript_types`
         -   [x] `rebuild_hooks`
-    -   [-] `get_logs` (Skipped for now)
+    -   [-] `get_logs` (Skipped - PostgreSQL log access varies by installation)
     -   [x] **Auth User Management**
         -   [x] `list_auth_users`
         -   [x] `get_auth_user`
         -   [x] `create_auth_user`
         -   [x] `delete_auth_user`
         -   [x] `update_auth_user`
-    -   [x] **Storage Insights (Next)**
+    -   [x] **Storage Insights**
         -   [x] `list_storage_buckets`
         -   [x] `list_storage_objects`
-    -   [x] **Realtime Inspection (Future)**
+    -   [x] **Realtime Inspection**
         -   [x] `list_realtime_publications`
     -   [ ] **Extension-Specific Tools (Future, if needed)**
         -   [ ] e.g., `list_cron_jobs` (for pg_cron)
@@ -55,4 +56,8 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
         -   [ ] `list_edge_functions`
         -   [ ] `get_edge_function_details`
         -   [ ] `deploy_edge_function`
--   [ ] Add Basic README.md
+-   [x] Add Basic README.md
+-   [x] Test Infrastructure
+    -   [x] Bun test runner setup
+    -   [x] Utils tests
+    -   [x] Type definition tests
