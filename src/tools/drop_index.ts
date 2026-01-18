@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback } from './utils.js';
+import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Input schema
 const DropIndexInputSchema = z.object({
@@ -113,8 +113,8 @@ export const dropIndexTool = {
             `;
 
             const indexResult = await executeSqlWithFallback(client, indexQuery, true);
-            const indexDetails = indexResult.success && (indexResult.data as unknown[]).length > 0
-                ? (indexResult.data as unknown[])[0] as {
+            const indexDetails = !isSqlErrorResponse(indexResult) && indexResult.length > 0
+                ? indexResult[0] as {
                     schema_name: string;
                     table_name: string;
                     index_name: string;

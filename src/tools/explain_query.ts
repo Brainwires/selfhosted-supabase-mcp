@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback } from './utils.js';
+import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Output schema for query explanation
 const ExplainQueryOutputSchema = z.object({
@@ -123,11 +123,11 @@ export const explainQueryTool = {
         try {
             const result = await executeSqlWithFallback(client, explainSql, !analyze);
 
-            if (!result.success) {
-                throw new Error(result.error || 'Failed to explain query');
+            if (isSqlErrorResponse(result)) {
+                throw new Error(result.error.message || 'Failed to explain query');
             }
 
-            const rows = result.data as unknown[];
+            const rows = result as unknown[];
 
             // Parse the result based on format
             let plan: unknown;

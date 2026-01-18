@@ -23,8 +23,8 @@ const StorageObjectSchema = z.object({
     version: z.string().nullable(),
     // Get mimetype directly from SQL extraction
     mimetype: z.string().nullable(), 
-    // size comes from metadata
-    size: z.string().pipe(z.coerce.number().int()).nullable(),
+    // size comes from metadata (can be string from DB that needs coercion to number)
+    size: z.union([z.coerce.number().int(), z.null()]),
     // Keep raw metadata as well
     metadata: z.record(z.string(), z.any()).nullable(),
     created_at: z.string().nullable(),

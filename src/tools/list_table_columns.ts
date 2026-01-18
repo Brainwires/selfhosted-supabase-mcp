@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Output schema for table columns
 const ListTableColumnsOutputSchema = z.array(z.object({
@@ -99,11 +99,11 @@ export const listTableColumnsTool = {
 
         const result = await executeSqlWithFallback(client, sql, true);
 
-        if (!result.success) {
-            throw new Error(result.error || 'Failed to list table columns');
+        if (isSqlErrorResponse(result)) {
+            throw new Error(result.error.message || 'Failed to list table columns');
         }
 
-        const rows = result.data as unknown[];
+        const rows = result as unknown[];
         if (rows.length === 0) {
             throw new Error(`Table ${schema}.${table} not found or has no columns.`);
         }

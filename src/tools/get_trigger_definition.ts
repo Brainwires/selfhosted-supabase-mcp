@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback } from './utils.js';
+import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Output schema for trigger definition
 const GetTriggerDefinitionOutputSchema = z.object({
@@ -104,11 +104,11 @@ export const getTriggerDefinitionTool = {
 
         const result = await executeSqlWithFallback(client, sql, true);
 
-        if (!result.success) {
-            throw new Error(result.error || 'Failed to get trigger definition');
+        if (isSqlErrorResponse(result)) {
+            throw new Error(result.error.message || 'Failed to get trigger definition');
         }
 
-        const rows = result.data as unknown[];
+        const rows = result as unknown[];
         if (!rows || rows.length === 0) {
             throw new Error(`Trigger "${trigger_name}" not found on ${schema}.${table}.`);
         }

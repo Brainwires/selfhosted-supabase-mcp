@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
+import { handleSqlResponse, executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Output schema for function definition
 const GetFunctionDefinitionOutputSchema = z.object({
@@ -88,11 +88,11 @@ export const getFunctionDefinitionTool = {
         const result = await executeSqlWithFallback(client, sql, true);
 
         // Handle the response - expect single result
-        if (!result.success) {
-            throw new Error(result.error || 'Failed to get function definition');
+        if (isSqlErrorResponse(result)) {
+            throw new Error(result.error.message || 'Failed to get function definition');
         }
 
-        const rows = result.data as unknown[];
+        const rows = result as unknown[];
         if (!rows || rows.length === 0) {
             throw new Error(`Function ${schema}.${function_name}${argument_types ? `(${argument_types})` : ''} not found.`);
         }

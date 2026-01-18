@@ -146,9 +146,9 @@ function setupRequestHandlers(
         }
 
         try {
-            let parsedArgs = request.params.arguments;
+            let parsedArgs: Record<string, unknown> | undefined = request.params.arguments;
             if (tool.inputSchema && typeof tool.inputSchema.parse === 'function') {
-                parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments);
+                parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments) as Record<string, unknown>;
             }
 
             // Determine auth context:

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback } from './utils.js';
+import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Input schema
 const DisableExtensionInputSchema = z.object({
@@ -72,7 +72,7 @@ export const disableExtensionTool = {
                 WHERE e.extname = '${extension_name.replace(/'/g, "''")}'
             `, true);
 
-            if (!extensionInfo.success || (extensionInfo.data as unknown[]).length === 0) {
+            if (isSqlErrorResponse(extensionInfo) || extensionInfo.length === 0) {
                 return {
                     success: true,
                     message: `Extension "${extension_name}" is not installed.`,
@@ -80,7 +80,7 @@ export const disableExtensionTool = {
                 };
             }
 
-            const extData = (extensionInfo.data as unknown[])[0] as {
+            const extData = extensionInfo[0] as {
                 name: string;
                 version: string;
                 schema: string;
@@ -96,8 +96,8 @@ export const disableExtensionTool = {
                       AND d.deptype = 'e'
                 `, true);
 
-                if (dependentsCheck.success) {
-                    const depCount = ((dependentsCheck.data as unknown[])[0] as { dep_count: number })?.dep_count || 0;
+                if (!isSqlErrorResponse(dependentsCheck)) {
+                    const depCount = (dependentsCheck[0] as { dep_count: number })?.dep_count || 0;
                     if (depCount > 0) {
                         return {
                             success: false,

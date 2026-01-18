@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Input schema
 const SignoutUserInputSchema = z.object({
     user_id: z.uuid().optional().describe('The UUID of the user to sign out. If provided, revokes all sessions for this user.'),
     session_id: z.uuid().optional().describe('The UUID of a specific session to revoke. Takes precedence over user_id if both provided.'),
     scope: z.enum(['local', 'global', 'others']).optional().default('global').describe('Scope of signout: "local" (current session via Supabase client), "global" (all sessions), "others" (all except current). Default: global.'),
+    elevated: z.boolean().optional().default(false).describe('When connected with service_role, set to true to sign out any user (bypass RLS). Without this, only your own sessions can be revoked in HTTP mode.'),
 });
 type SignoutUserInput = z.infer<typeof SignoutUserInputSchema>;
 
@@ -38,20 +38,25 @@ const mcpInputSchema = {
             default: 'global',
             description: 'Scope of signout: "local" (current session via Supabase client), "global" (all sessions), "others" (all except current). Default: global.',
         },
+        elevated: {
+            type: 'boolean',
+            default: false,
+            description: 'When connected with service_role, set to true to sign out any user (bypass RLS). Without this, only your own sessions can be revoked in HTTP mode.',
+        },
     },
     required: [],
 };
 
 export const signoutUserTool = {
     name: 'signout_user',
-    description: 'Sign out a user and invalidate their sessions. Can target a specific session by session_id, all sessions for a user by user_id, or use the Supabase client signOut with scope control.',
+    description: 'Sign out a user and invalidate their sessions. Can target a specific session by session_id, all sessions for a user by user_id, or use the Supabase client signOut with scope control. When using HTTP transport, users can only sign out their own sessions (RLS enforced) unless elevated=true with service_role.',
     inputSchema: SignoutUserInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: SignoutUserOutputSchema,
 
     execute: async (input: SignoutUserInput, context: ToolContext) => {
         const client = context.selfhostedClient;
-        const { user_id, session_id, scope } = input;
+        const { user_id, session_id, scope, elevated } = input;
 
         try {
             // If session_id is provided, revoke that specific session directly
@@ -63,38 +68,53 @@ export const signoutUserTool = {
                     };
                 }
 
-                // Delete the specific session
-                const result = await executeSqlWithFallback(client, `
-                    WITH deleted AS (
-                        DELETE FROM auth.sessions
-                        WHERE id = '${session_id.replace(/'/g, "''")}'
-                        RETURNING id
-                    )
-                    SELECT COUNT(*) AS deleted_count FROM deleted
-                `, true);
+                // First, get session details to check ownership
+                const sessionDetails = await client.executeTransactionWithPg(async (pgClient) => {
+                    const result = await pgClient.query(
+                        `SELECT s.id, s.user_id, u.email
+                         FROM auth.sessions s
+                         JOIN auth.users u ON u.id = s.user_id
+                         WHERE s.id = $1`,
+                        [session_id]
+                    );
+                    return result.rows[0] || null;
+                });
 
-                if (isSqlErrorResponse(result)) {
-                    return {
-                        success: false,
-                        error: `Failed to revoke session: ${result.error.message}`,
-                    };
-                }
-
-                const deletedCount = ((result as Array<{ deleted_count: string }>)[0]?.deleted_count) || '0';
-                const count = parseInt(deletedCount, 10);
-
-                if (count === 0) {
+                if (!sessionDetails) {
                     return {
                         success: false,
                         error: `Session ${session_id} not found or already revoked.`,
                     };
                 }
 
+                // RLS enforcement: In HTTP mode, users can only revoke their own sessions
+                // Unless they're service_role with elevated=true
+                if (context.authContext) {
+                    const role = context.authContext.role;
+                    const currentUserId = context.authContext.userId;
+
+                    if (role === 'service_role' && elevated) {
+                        context.log?.(`Elevated access: revoking session ${session_id} for user ${sessionDetails.user_id} (service_role)`, 'info');
+                    } else if (sessionDetails.user_id !== currentUserId) {
+                        context.log?.(`RLS: User '${currentUserId}' attempted to revoke session belonging to '${sessionDetails.user_id}'`, 'warn');
+                        throw new Error('Cannot revoke sessions belonging to other users. Use elevated=true with service_role to bypass.');
+                    }
+                }
+
+                // Delete the specific session using parameterized query
+                const deleteResult = await client.executeTransactionWithPg(async (pgClient) => {
+                    const result = await pgClient.query(
+                        'DELETE FROM auth.sessions WHERE id = $1 RETURNING id',
+                        [session_id]
+                    );
+                    return result.rowCount || 0;
+                });
+
                 context.log?.(`Revoked session ${session_id}`, 'info');
 
                 return {
                     success: true,
-                    sessions_revoked: count,
+                    sessions_revoked: deleteResult,
                     message: `Session ${session_id} has been revoked.`,
                 };
             }
@@ -108,34 +128,40 @@ export const signoutUserTool = {
                     };
                 }
 
-                // Delete all sessions for the user
-                const result = await executeSqlWithFallback(client, `
-                    WITH deleted AS (
-                        DELETE FROM auth.sessions
-                        WHERE user_id = '${user_id.replace(/'/g, "''")}'
-                        RETURNING id
-                    )
-                    SELECT COUNT(*) AS deleted_count FROM deleted
-                `, true);
+                // RLS enforcement: In HTTP mode, users can only revoke their own sessions
+                // Unless they're service_role with elevated=true
+                let targetUserId = user_id;
+                if (context.authContext) {
+                    const role = context.authContext.role;
+                    const currentUserId = context.authContext.userId;
 
-                if (isSqlErrorResponse(result)) {
-                    return {
-                        success: false,
-                        error: `Failed to revoke sessions: ${result.error.message}`,
-                    };
+                    if (role === 'service_role' && elevated) {
+                        context.log?.(`Elevated access: revoking all sessions for user ${user_id} (service_role)`, 'info');
+                    } else if (user_id !== currentUserId) {
+                        context.log?.(`RLS: User '${currentUserId}' attempted to revoke sessions for user '${user_id}'`, 'warn');
+                        throw new Error('Cannot revoke sessions belonging to other users. Use elevated=true with service_role to bypass.');
+                    } else {
+                        targetUserId = currentUserId;
+                    }
                 }
 
-                const deletedCount = ((result as Array<{ deleted_count: string }>)[0]?.deleted_count) || '0';
-                const count = parseInt(deletedCount, 10);
+                // Delete all sessions for the user using parameterized query
+                const count = await client.executeTransactionWithPg(async (pgClient) => {
+                    const result = await pgClient.query(
+                        'DELETE FROM auth.sessions WHERE user_id = $1 RETURNING id',
+                        [targetUserId]
+                    );
+                    return result.rowCount || 0;
+                });
 
-                context.log?.(`Revoked ${count} session(s) for user ${user_id}`, 'info');
+                context.log?.(`Revoked ${count} session(s) for user ${targetUserId}`, 'info');
 
                 return {
                     success: true,
                     sessions_revoked: count,
                     message: count > 0
-                        ? `Revoked ${count} session(s) for user ${user_id}.`
-                        : `No active sessions found for user ${user_id}.`,
+                        ? `Revoked ${count} session(s) for user ${targetUserId}.`
+                        : `No active sessions found for user ${targetUserId}.`,
                 };
             }
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { executeSqlWithFallback } from './utils.js';
+import { executeSqlWithFallback, isSqlErrorResponse } from './utils.js';
 
 // Output schema for index stats
 const GetIndexStatsOutputSchema = z.object({
@@ -89,11 +89,11 @@ export const getIndexStatsTool = {
 
         const result = await executeSqlWithFallback(client, sql, true);
 
-        if (!result.success) {
-            throw new Error(result.error || 'Failed to get index stats');
+        if (isSqlErrorResponse(result)) {
+            throw new Error(result.error.message || 'Failed to get index stats');
         }
 
-        const rows = result.data as unknown[];
+        const rows = result as unknown[];
         if (!rows || rows.length === 0) {
             throw new Error(`Index "${index_name}" not found in schema "${schema}".`);
         }
