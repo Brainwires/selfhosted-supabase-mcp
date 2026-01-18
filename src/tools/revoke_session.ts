@@ -5,7 +5,6 @@ import type { ToolContext } from './types.js';
 const RevokeSessionInputSchema = z.object({
     session_id: z.uuid().describe('The UUID of the session to revoke.'),
     confirm: z.boolean().optional().default(false).describe('Must be true to execute. Without this, returns a preview.'),
-    elevated: z.boolean().optional().default(false).describe('When connected with service_role, set to true to revoke any user\'s session (bypass RLS). Without this, only your own sessions can be revoked.'),
 });
 type RevokeSessionInput = z.infer<typeof RevokeSessionInputSchema>;
 
@@ -39,25 +38,20 @@ const mcpInputSchema = {
             default: false,
             description: 'Must be true to execute. Without this, returns a preview.',
         },
-        elevated: {
-            type: 'boolean',
-            default: false,
-            description: 'When connected with service_role, set to true to revoke any user\'s session (bypass RLS). Without this, only your own sessions can be revoked.',
-        },
     },
     required: ['session_id'],
 };
 
 export const revokeSessionTool = {
     name: 'revoke_session',
-    description: 'Revokes (deletes) an authentication session, effectively logging out that session. When using HTTP transport, users can only revoke their own sessions (RLS enforced). Requires confirm=true to execute.',
+    description: 'Revokes (deletes) an authentication session, effectively logging out that session. Requires confirm=true to execute.',
     inputSchema: RevokeSessionInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: RevokeSessionOutputSchema,
 
     execute: async (input: RevokeSessionInput, context: ToolContext) => {
         const client = context.selfhostedClient;
-        const { session_id, confirm, elevated } = input;
+        const { session_id, confirm } = input;
 
         if (!client.isPgAvailable()) {
             throw new Error('Direct database connection (DATABASE_URL) is required for revoking sessions but is not configured or available.');
@@ -89,21 +83,6 @@ export const revokeSessionTool = {
                     message: `Session with ID ${session_id} not found.`,
                     action: 'not_found' as const,
                 };
-            }
-
-            // RLS enforcement: In HTTP mode, users can only revoke their own sessions
-            // Unless they're service_role with elevated=true
-            if (context.authContext) {
-                const role = context.authContext.role;
-                const currentUserId = context.authContext.userId;
-
-                // service_role with elevated=true can revoke any session
-                if (role === 'service_role' && elevated) {
-                    context.log?.(`Elevated access: revoking session ${session_id} for user ${sessionDetails.user_id} (service_role)`, 'info');
-                } else if (sessionDetails.user_id !== currentUserId) {
-                    context.log?.(`RLS: User '${currentUserId}' attempted to revoke session belonging to '${sessionDetails.user_id}'`, 'warn');
-                    throw new Error('Cannot revoke sessions belonging to other users. Use elevated=true with service_role to bypass.');
-                }
             }
 
             // If not confirmed, return preview

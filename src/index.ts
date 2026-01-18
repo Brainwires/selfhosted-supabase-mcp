@@ -160,7 +160,7 @@ function setupRequestHandlers(
             const context: ToolContext = {
                 selfhostedClient,
                 workspacePath: options.workspacePath,
-                authContext, // Pass auth context to tools for RLS enforcement
+                authContext, // Pass auth context to tools
                 log: (message, level = 'info') => {
                     console.error(`[${level.toUpperCase()}] ${message}`);
                     if (level === 'warn' || level === 'error') {

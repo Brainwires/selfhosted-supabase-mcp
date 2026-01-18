@@ -107,6 +107,14 @@ export class SessionManager {
     }
 
     /**
+     * Gets the auth context for a session by MCP session ID.
+     * This is the single source of truth for session auth context.
+     */
+    getAuthContext(mcpSessionId: string): AuthContext | undefined {
+        return this.sessions.get(mcpSessionId)?.authContext;
+    }
+
+    /**
      * Updates the auth context for an existing session.
      * Used when a client sends a refreshed token.
      */

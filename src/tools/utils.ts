@@ -6,6 +6,10 @@ import type { SelfhostedSupabaseClient } from '../client/index.js';
 
 const execAsync = promisify(exec);
 
+// ============================================================================
+// SQL Utilities
+// ============================================================================
+
 /**
  * Type guard to check if a SQL execution result is an error response.
  */

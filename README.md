@@ -85,8 +85,8 @@ The server exposes **57 tools** to MCP clients, organized into the following cat
 *   `delete_auth_user`: Deletes or disables a user (with confirmation).
 
 ### Auth Session Management
-*   `list_auth_sessions`: Lists active authentication sessions. In HTTP mode, users can only see their own sessions (RLS enforced).
-*   `revoke_session`: Revokes (deletes) an authentication session. In HTTP mode, users can only revoke their own sessions (RLS enforced).
+*   `list_auth_sessions`: Lists active authentication sessions. Can be filtered by user_id.
+*   `revoke_session`: Revokes (deletes) an authentication session.
 
 ### Auth Flow
 *   `signin_with_password`: Sign in a user with email/password and get JWT tokens.
@@ -147,7 +147,7 @@ bun run dist/index.js \
 - Persistent connections via Server-Sent Events (SSE)
 - JWT authentication - clients pass `Authorization: Bearer <token>`
 - Automatic token validation and refresh
-- RLS enforcement - session tools restrict users to their own data
+- Session management with limits and automatic cleanup
 - Health check endpoint at `GET /health`
 
 **HTTP Endpoints:**

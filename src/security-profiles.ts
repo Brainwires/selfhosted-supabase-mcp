@@ -64,7 +64,7 @@ const STANDARD_TOOLS = [
     'create_auth_user',
     'update_auth_user',
     'delete_auth_user',
-    // Auth session tools (RLS enforced in HTTP mode)
+    // Auth session tools
     'list_auth_sessions',
     // Auth flow tools
     'signin_with_password',
@@ -100,7 +100,7 @@ const ADMIN_TOOLS = [
     'drop_rls_policy',
     'create_index',
     'drop_index',
-    // Session management (RLS enforced in HTTP mode)
+    // Session management
     'revoke_session',
     // Storage operations
     'create_storage_bucket',

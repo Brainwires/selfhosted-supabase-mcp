@@ -22,7 +22,6 @@ const ListAuthSessionsInputSchema = z.object({
     user_id: z.uuid().optional().describe('Filter sessions by user ID.'),
     limit: z.number().optional().default(50).describe('Maximum number of sessions to return.'),
     offset: z.number().optional().default(0).describe('Number of sessions to skip.'),
-    elevated: z.boolean().optional().default(false).describe('When connected with service_role, set to true to view all users\' sessions (bypass RLS). Without this, only your own sessions are shown.'),
 });
 type ListAuthSessionsInput = z.infer<typeof ListAuthSessionsInputSchema>;
 
@@ -45,48 +44,23 @@ const mcpInputSchema = {
             default: 0,
             description: 'Number of sessions to skip.',
         },
-        elevated: {
-            type: 'boolean',
-            default: false,
-            description: 'When connected with service_role, set to true to view all users\' sessions (bypass RLS). Without this, only your own sessions are shown.',
-        },
     },
     required: [],
 };
 
 export const listAuthSessionsTool = {
     name: 'list_auth_sessions',
-    description: 'Lists active authentication sessions. When using HTTP transport, users can only see their own sessions (RLS enforced). The user_id filter is ignored in HTTP mode.',
+    description: 'Lists active authentication sessions. Can be filtered by user_id.',
     inputSchema: ListAuthSessionsInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: ListAuthSessionsOutputSchema,
 
     execute: async (input: ListAuthSessionsInput, context: ToolContext) => {
         const client = context.selfhostedClient;
-        const { limit, offset, elevated } = input;
-        let { user_id } = input;
+        const { user_id, limit, offset } = input;
 
         if (!client.isPgAvailable()) {
             throw new Error('Direct database connection (DATABASE_URL) is required for accessing auth sessions but is not configured or available.');
-        }
-
-        // RLS enforcement: In HTTP mode, users can only see their own sessions
-        // Unless they're service_role with elevated=true
-        if (context.authContext) {
-            const role = context.authContext.role;
-            const currentUserId = context.authContext.userId;
-
-            // service_role with elevated=true can see all sessions
-            if (role === 'service_role' && elevated) {
-                context.log?.(`Elevated access: listing sessions for ${user_id || 'all users'} (service_role)`, 'info');
-                // user_id filter is respected when elevated
-            } else {
-                // Regular users or service_role without elevation: restrict to own sessions
-                if (user_id && user_id !== currentUserId) {
-                    context.log?.(`RLS: Ignoring user_id filter '${user_id}', restricting to current user '${currentUserId}'`, 'warn');
-                }
-                user_id = currentUserId;
-            }
         }
 
         try {

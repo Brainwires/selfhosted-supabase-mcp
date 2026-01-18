@@ -61,7 +61,7 @@ import { createAuthUserTool } from './create_auth_user.js';
 import { updateAuthUserTool } from './update_auth_user.js';
 import { deleteAuthUserTool } from './delete_auth_user.js';
 
-// Auth Sessions (RLS enforced in HTTP mode)
+// Auth Sessions
 import { listAuthSessionsTool } from './list_auth_sessions.js';
 import { revokeSessionTool } from './revoke_session.js';
 
@@ -123,7 +123,6 @@ export interface AppTool {
 /**
  * All available tools, keyed by name.
  * Auth tools use service key for privileged operations.
- * Session tools have RLS enforcement in HTTP mode (users see/manage only their own).
  */
 export const availableTools: Record<string, AppTool> = {
     // Schema & Migrations
@@ -181,7 +180,7 @@ export const availableTools: Record<string, AppTool> = {
     [updateAuthUserTool.name]: updateAuthUserTool as AppTool,
     [deleteAuthUserTool.name]: deleteAuthUserTool as AppTool,
 
-    // Auth Sessions (RLS enforced in HTTP mode)
+    // Auth Sessions
     [listAuthSessionsTool.name]: listAuthSessionsTool as AppTool,
     [revokeSessionTool.name]: revokeSessionTool as AppTool,
 

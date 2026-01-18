@@ -48,9 +48,6 @@ export class HttpMcpServer {
     /** Callback to create MCP server instance for new sessions */
     private mcpServerFactory: () => Server;
 
-    /** Store auth context by session ID for tool execution */
-    private sessionAuthContexts: Map<string, AuthContext> = new Map();
-
     private options: HttpMcpServerOptions;
 
     constructor(options: HttpMcpServerOptions, mcpServerFactory: () => Server) {
@@ -71,9 +68,10 @@ export class HttpMcpServer {
     /**
      * Gets the auth context for a given MCP session ID.
      * Used by tool execution to determine the current user.
+     * Delegates to SessionManager as the single source of truth.
      */
     getAuthContextForSession(sessionId: string): AuthContext | undefined {
-        return this.sessionAuthContexts.get(sessionId);
+        return this.sessionManager.getAuthContext(sessionId);
     }
 
     /**
@@ -174,7 +172,6 @@ export class HttpMcpServer {
                 transport = this.transports.get(sessionId)!;
 
                 // Update auth context (client may have refreshed token)
-                this.sessionAuthContexts.set(sessionId, authContext);
                 this.sessionManager.updateSessionAuth(sessionId, authContext);
 
             } else if (!sessionId && isInitializeRequest(req.body)) {
@@ -184,7 +181,6 @@ export class HttpMcpServer {
                     onsessioninitialized: (newSessionId) => {
                         console.error(`[HttpMcpServer] Session initialized: ${newSessionId} (user: ${authContext.userId})`);
                         this.transports.set(newSessionId, transport);
-                        this.sessionAuthContexts.set(newSessionId, authContext);
                         this.sessionManager.createSession(newSessionId, authContext);
                     },
                 });
@@ -195,7 +191,6 @@ export class HttpMcpServer {
                     if (sid) {
                         console.error(`[HttpMcpServer] Transport closed for session: ${sid}`);
                         this.transports.delete(sid);
-                        this.sessionAuthContexts.delete(sid);
                         this.sessionManager.removeSession(sid);
                     }
                 };
@@ -384,7 +379,6 @@ export class HttpMcpServer {
             }
         }
         this.transports.clear();
-        this.sessionAuthContexts.clear();
 
         // Close session manager
         this.sessionManager.close();

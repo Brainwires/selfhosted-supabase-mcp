@@ -14,8 +14,8 @@ The server supports two transport modes with different security characteristics:
 ### HTTP Mode
 - REST-based transport with JWT authentication
 - Clients must authenticate with a Supabase JWT
-- RLS enforcement available for per-user access control
-- Best for: Web applications, multi-user scenarios
+- Stateful sessions that persist (unlike stdio which exits)
+- Best for: AI agents that need persistent connections
 
 ```bash
 # Start in HTTP mode
@@ -100,48 +100,9 @@ The server accepts three types of Supabase JWTs:
 | **service_role** | Admin operations (like sudo) | Bypasses RLS, full access |
 | **anon** | Public/anonymous access | RLS enforced, no user context |
 
-**Typical workflow**: Connect with a user JWT for normal debugging. When you need to perform administrative operations (bypass RLS, manage storage buckets, etc.), reconnect with the service_role key.
+**Typical workflow**: Connect with the service_role key for full access during debugging. When you need to test behavior as a specific user (e.g., verify RLS policies), you can sign in as that user to get a user JWT.
 
-This is similar to running unprivileged by default on an OS and using `sudo` when needed.
-
-### RLS Enforcement (Per-User Access)
-
-In HTTP mode, certain tools enforce Row-Level Security based on the authenticated user:
-
-| Tool | RLS Behavior |
-|------|--------------|
-| `list_auth_sessions` | Users can only see their own sessions |
-| `revoke_session` | Users can only revoke their own sessions |
-| Storage mutations | Require `service_role` JWT |
-
-**Example**: When an authenticated user calls `list_auth_sessions`, they only see sessions for their own `user_id`, regardless of any `user_id` filter parameter.
-
-### Service Role with Elevation
-
-In HTTP mode, certain privileged operations require both a `service_role` JWT **and** an explicit `elevated: true` parameter:
-
-| Tool | Requires `elevated: true` |
-|------|---------------------------|
-| `create_storage_bucket` | Yes (to create) |
-| `delete_storage_bucket` | Yes (to delete) |
-| `delete_storage_object` | Yes (to delete) |
-| `list_auth_sessions` | Yes (to view other users' sessions) |
-| `revoke_session` | Yes (to revoke other users' sessions) |
-
-This two-step confirmation prevents accidental privileged operations. Even when connected with `service_role`, the AI or user must explicitly opt-in to elevated access for each operation.
-
-**Example workflow**:
-```json
-// First attempt - denied without elevation
-{ "name": "my-bucket", "confirm": true }
-// Response: "This operation requires elevated privileges. Set elevated=true..."
-
-// Second attempt - with elevation
-{ "name": "my-bucket", "confirm": true, "elevated": true }
-// Response: "Successfully created bucket..."
-```
-
-This encourages running unprivileged by default, only elevating when explicitly needed.
+This is like running as root for debugging, and using `su username` when you need to test user-specific behavior.
 
 ### Session Limits
 
@@ -273,7 +234,7 @@ Logs are JSON-structured for easy parsing:
 - All tool executions (success and failure)
 - Blocked operations (disabled tools, missing permissions)
 - Security-relevant events (credential reveals, destructive operations)
-- RLS enforcement actions (in HTTP mode)
+- Session lifecycle events (in HTTP mode)
 
 ### Sensitive Field Redaction
 
@@ -305,6 +266,54 @@ The following fields are automatically redacted in logs:
 8. **Prefer `disable_instead`** - When removing user access, disable instead of delete to preserve audit trails.
 
 9. **Restrict `generate_user_token`** - This tool enables user impersonation; only enable it when absolutely necessary.
+
+## Credential Storage
+
+### Server Identity Credentials
+
+When running in HTTP mode, the MCP server maintains its own user identity for server-to-Supabase authentication. These credentials are stored locally:
+
+**Location**: `~/.config/supabase-mcp/credentials.json`
+
+**Contents**:
+```json
+{
+  "email": "mcp-server-abc123@localhost",
+  "password": "<generated-password>"
+}
+```
+
+### Security Measures
+
+| Protection | Description |
+|------------|-------------|
+| **File Permissions** | Created with `0o600` (owner read/write only) |
+| **Auto-generated** | Credentials are randomly generated, not user-provided |
+| **Local storage** | Never transmitted or logged |
+
+### Risks
+
+⚠️ **If your home directory is compromised**, an attacker could:
+- Impersonate the MCP server to your Supabase instance
+- Access data according to the server's permissions
+
+### Recommendations for Sensitive Deployments
+
+1. **Use explicit credentials**: Instead of auto-generated credentials, provide your own via environment variables:
+   ```bash
+   export MCP_USER_EMAIL="mcp-server@yourdomain.com"
+   export MCP_USER_PASSWORD="your-secure-password"
+   ```
+
+2. **Restrict the MCP user's database permissions**: Create a dedicated Supabase user with minimal required permissions.
+
+3. **Monitor the MCP user's activity**: Enable audit logging and monitor for unusual activity from the MCP server's user account.
+
+4. **Consider OS-level encryption**: Use full-disk encryption or encrypted home directories for additional protection.
+
+5. **Rotate credentials periodically**: Delete `~/.config/supabase-mcp/credentials.json` to force regeneration, or update the environment variables.
+
+---
 
 ## Environment Variables
 
