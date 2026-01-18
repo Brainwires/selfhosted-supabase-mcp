@@ -1,7 +1,8 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
 import { z } from 'zod';
-import { isSqlErrorResponse, handleSqlResponse } from '../tools/utils.js';
+import { isSqlErrorResponse, handleSqlResponse, executeSqlWithFallback, runExternalCommand } from '../tools/utils.js';
 import type { SqlExecutionResult, SqlErrorResponse, SqlSuccessResponse } from '../types/index.js';
+import { createMockClient, createSuccessResponse, createErrorResponse } from './helpers/mocks.js';
 
 describe('utils', () => {
     describe('isSqlErrorResponse', () => {
@@ -89,6 +90,106 @@ describe('utils', () => {
             expect(() => handleSqlResponse(invalidData, nestedSchema)).toThrow(
                 /user\.email/
             );
+        });
+    });
+
+    describe('executeSqlWithFallback', () => {
+        test('uses direct pg connection when available', async () => {
+            const expectedRows = [{ id: 1, name: 'test' }];
+            const mockClient = createMockClient({
+                pgAvailable: true,
+                pgResult: createSuccessResponse(expectedRows),
+                rpcResult: createSuccessResponse([{ id: 2, name: 'rpc' }]),
+            });
+
+            const result = await executeSqlWithFallback(mockClient, 'SELECT * FROM users');
+
+            expect(result).toEqual(expectedRows);
+            expect(mockClient.executeSqlWithPg).toHaveBeenCalledTimes(1);
+            expect(mockClient.executeSqlViaRpc).not.toHaveBeenCalled();
+        });
+
+        test('falls back to RPC when pg is not available', async () => {
+            const expectedRows = [{ id: 1, name: 'rpc-result' }];
+            const mockClient = createMockClient({
+                pgAvailable: false,
+                rpcResult: createSuccessResponse(expectedRows),
+            });
+
+            const result = await executeSqlWithFallback(mockClient, 'SELECT * FROM users', true);
+
+            expect(result).toEqual(expectedRows);
+            expect(mockClient.executeSqlViaRpc).toHaveBeenCalledTimes(1);
+            expect(mockClient.executeSqlViaRpc).toHaveBeenCalledWith('SELECT * FROM users', true);
+        });
+
+        test('propagates error from pg connection', async () => {
+            const errorResponse = createErrorResponse('Connection failed', 'CONN_ERR');
+            const mockClient = createMockClient({
+                pgAvailable: true,
+                pgResult: errorResponse,
+            });
+
+            const result = await executeSqlWithFallback(mockClient, 'SELECT 1');
+
+            expect(result).toEqual(errorResponse);
+        });
+
+        test('propagates error from RPC fallback', async () => {
+            const errorResponse = createErrorResponse('RPC failed', 'RPC_ERR');
+            const mockClient = createMockClient({
+                pgAvailable: false,
+                rpcResult: errorResponse,
+            });
+
+            const result = await executeSqlWithFallback(mockClient, 'SELECT 1');
+
+            expect(result).toEqual(errorResponse);
+        });
+
+        test('defaults readOnly to true', async () => {
+            const mockClient = createMockClient({ pgAvailable: false });
+
+            await executeSqlWithFallback(mockClient, 'SELECT 1');
+
+            expect(mockClient.executeSqlViaRpc).toHaveBeenCalledWith('SELECT 1', true);
+        });
+    });
+
+    describe('runExternalCommand', () => {
+        test('executes command and returns stdout', async () => {
+            const result = await runExternalCommand('echo "hello world"');
+
+            expect(result.stdout.trim()).toBe('hello world');
+            expect(result.stderr).toBe('');
+            expect(result.error).toBeNull();
+        });
+
+        test('returns empty stdout for command with no output', async () => {
+            const result = await runExternalCommand('true');
+
+            expect(result.stdout).toBe('');
+            expect(result.stderr).toBe('');
+            expect(result.error).toBeNull();
+        });
+
+        test('captures stderr and error for failing command', async () => {
+            const result = await runExternalCommand('ls /nonexistent-directory-12345');
+
+            expect(result.error).not.toBeNull();
+            expect(result.stderr.length).toBeGreaterThan(0);
+        });
+
+        test('returns error for non-existent command', async () => {
+            const result = await runExternalCommand('nonexistent-command-12345');
+
+            expect(result.error).not.toBeNull();
+        });
+
+        test('handles command with exit code', async () => {
+            const result = await runExternalCommand('exit 1');
+
+            expect(result.error).not.toBeNull();
         });
     });
 });
