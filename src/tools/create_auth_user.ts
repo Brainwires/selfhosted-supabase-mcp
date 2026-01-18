@@ -6,23 +6,23 @@ import type { SqlSuccessResponse, AuthUser } from '../types/index.js'; // Import
 
 // Input schema
 const CreateAuthUserInputSchema = z.object({
-    email: z.string().email().describe('The email address for the new user.'),
-    password: z.string().min(6).describe('Plain text password (min 6 chars). WARNING: Insecure.'),
-    role: z.string().optional().describe('User role.'),
-    app_metadata: z.record(z.unknown()).optional().describe('Optional app metadata.'),
-    user_metadata: z.record(z.unknown()).optional().describe('Optional user metadata.'),
+    email: z.string().email('Invalid email address').describe('The email address for the new user.'),
+    password: z.string().min(6, 'Password must be at least 6 characters').describe('Plain text password (min 6 chars). WARNING: Insecure.'),
+    role: z.optional(z.string()).describe('User role.'),
+    app_metadata: z.optional(z.record(z.string(), z.unknown())).describe('Optional app metadata.'),
+    user_metadata: z.optional(z.record(z.string(), z.unknown())).describe('Optional user metadata.'),
 });
 type CreateAuthUserInput = z.infer<typeof CreateAuthUserInputSchema>;
 
 // Output schema - Zod validation for the created user (should match AuthUser structure)
 const CreatedAuthUserZodSchema = z.object({
     id: z.string().uuid(),
-    email: z.string().email().nullable(),
+    email: z.string().email('Invalid email').nullable(),
     role: z.string().nullable(),
     created_at: z.string().nullable(),
     last_sign_in_at: z.string().nullable(), // Will likely be null on creation
-    raw_app_meta_data: z.record(z.unknown()).nullable(),
-    raw_user_meta_data: z.record(z.unknown()).nullable(),
+    raw_app_meta_data: z.record(z.string(), z.unknown()).nullable(),
+    raw_user_meta_data: z.record(z.string(), z.unknown()).nullable(),
     // Add other fields returned by the INSERT if necessary
 });
 // Use AuthUser for the output type hint

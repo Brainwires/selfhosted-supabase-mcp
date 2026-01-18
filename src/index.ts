@@ -233,10 +233,10 @@ async function main() {
                     throw new Error(`Tool ${toolName} does not have an execute method.`);
                 }
 
-                let parsedArgs = request.params.arguments;
+                let parsedArgs: Record<string, unknown> | undefined = request.params.arguments as Record<string, unknown> | undefined;
                 // Still use Zod schema for internal validation before execution
                 if (tool.inputSchema && typeof tool.inputSchema.parse === 'function') {
-                    parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments);
+                    parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments) as Record<string, unknown>;
                 }
 
                 // Create the context object using the imported type
@@ -265,7 +265,7 @@ async function main() {
                  console.error(`Error executing tool ${toolName}:`, error);
                  let errorMessage = `Error executing tool ${toolName}: `;
                  if (error instanceof z.ZodError) {
-                     errorMessage += `Input validation failed: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
+                     errorMessage += `Input validation failed: ${error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
                  } else if (error instanceof Error) {
                      errorMessage += error.message;
                  } else {

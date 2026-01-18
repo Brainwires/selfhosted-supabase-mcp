@@ -7,12 +7,12 @@ import type { AuthUser } from '../types/index.js'; // Import AuthUser
 // Input schema
 const UpdateAuthUserInputSchema = z.object({
     user_id: z.string().uuid().describe('The UUID of the user to update.'),
-    email: z.string().email().optional().describe('New email address.'),
-    password: z.string().min(6).optional().describe('New plain text password (min 6 chars). WARNING: Insecure.'),
-    role: z.string().optional().describe('New role.'),
-    app_metadata: z.record(z.unknown()).optional().describe('New app metadata (will overwrite existing).'),
-    user_metadata: z.record(z.unknown()).optional().describe('New user metadata (will overwrite existing).'),
-}).refine(data => 
+    email: z.optional(z.string().email('Invalid email')).describe('New email address.'),
+    password: z.optional(z.string().min(6, 'Password must be at least 6 characters')).describe('New plain text password (min 6 chars). WARNING: Insecure.'),
+    role: z.optional(z.string()).describe('New role.'),
+    app_metadata: z.optional(z.record(z.string(), z.unknown())).describe('New app metadata (will overwrite existing).'),
+    user_metadata: z.optional(z.record(z.string(), z.unknown())).describe('New user metadata (will overwrite existing).'),
+}).refine(data =>
     data.email || data.password || data.role || data.app_metadata || data.user_metadata,
     { message: "At least one field to update (email, password, role, app_metadata, user_metadata) must be provided." }
 );
@@ -21,13 +21,13 @@ type UpdateAuthUserInput = z.infer<typeof UpdateAuthUserInputSchema>;
 // Output schema - Zod validation for the updated user
 const UpdatedAuthUserZodSchema = z.object({
     id: z.string().uuid(),
-    email: z.string().email().nullable(),
+    email: z.string().email('Invalid email').nullable(),
     role: z.string().nullable(),
     created_at: z.string().nullable(),
     updated_at: z.string().nullable(), // Expect this to be updated
     last_sign_in_at: z.string().nullable(),
-    raw_app_meta_data: z.record(z.unknown()).nullable(),
-    raw_user_meta_data: z.record(z.unknown()).nullable(),
+    raw_app_meta_data: z.record(z.string(), z.unknown()).nullable(),
+    raw_user_meta_data: z.record(z.string(), z.unknown()).nullable(),
 });
 // Use AuthUser for the output type hint
 type UpdateAuthUserOutput = AuthUser;
