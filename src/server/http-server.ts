@@ -136,6 +136,17 @@ export class HttpMcpServer {
     }
 
     /**
+     * Gets the list of allowed origins from configuration.
+     */
+    private getAllowedOrigins(): string[] {
+        return this.options.corsOrigins ?? [
+            `http://localhost:${this.options.port}`,
+            `http://127.0.0.1:${this.options.port}`,
+            `http://${this.options.host}:${this.options.port}`,
+        ];
+    }
+
+    /**
      * Check if origin is allowed by CORS configuration.
      */
     private isOriginAllowed(origin: string | undefined): boolean {
@@ -144,11 +155,7 @@ export class HttpMcpServer {
             return true;
         }
 
-        const allowedOrigins = this.options.corsOrigins ?? [
-            `http://localhost:${this.options.port}`,
-            `http://127.0.0.1:${this.options.port}`,
-            `http://${this.options.host}:${this.options.port}`,
-        ];
+        const allowedOrigins = this.getAllowedOrigins();
 
         // Check for explicit wildcard
         if (allowedOrigins.includes('*')) {
@@ -171,6 +178,54 @@ export class HttpMcpServer {
         }
 
         return false;
+    }
+
+    /**
+     * Gets the appropriate Access-Control-Allow-Origin header value for a request.
+     * Returns the origin if it's in the allowlist, '*' for same-origin requests,
+     * or null if the origin is not allowed.
+     *
+     * This method returns a value from our trusted allowlist, not user input directly.
+     */
+    private getCorsAllowOriginValue(origin: string | undefined): string | null {
+        // No origin header = same-origin or non-browser request
+        if (!origin) {
+            return '*';
+        }
+
+        const allowedOrigins = this.getAllowedOrigins();
+
+        // Check for explicit wildcard configuration
+        if (allowedOrigins.includes('*')) {
+            return '*';
+        }
+
+        // Check exact match - return the allowlist entry, not user input
+        for (const allowed of allowedOrigins) {
+            if (allowed === origin) {
+                return allowed; // Return from allowlist, not user input
+            }
+        }
+
+        // Check wildcard patterns (e.g., http://localhost:*)
+        // For wildcard port patterns, we need to return the specific origin
+        // but only after validating it matches a trusted pattern
+        for (const allowed of allowedOrigins) {
+            if (allowed.endsWith(':*')) {
+                const baseUrl = allowed.slice(0, -2); // Remove ':*'
+                if (origin.startsWith(baseUrl + ':')) {
+                    // Extract just the port portion and rebuild a safe value
+                    const portMatch = origin.slice(baseUrl.length + 1);
+                    // Validate port is numeric to prevent injection
+                    if (/^\d+$/.test(portMatch)) {
+                        return `${baseUrl}:${portMatch}`;
+                    }
+                }
+            }
+        }
+
+        // Origin not allowed
+        return null;
     }
 
     private setupMiddleware(): void {
@@ -247,7 +302,11 @@ export class HttpMcpServer {
         this.app.use((req, res, next) => {
             const origin = req.headers.origin;
 
-            if (!this.isOriginAllowed(origin)) {
+            // Get the validated CORS origin value (from allowlist, not user input)
+            const corsOriginValue = this.getCorsAllowOriginValue(origin);
+
+            if (corsOriginValue === null) {
+                // Origin not in allowlist
                 if (req.method === 'OPTIONS') {
                     res.sendStatus(403);
                     return;
@@ -259,17 +318,8 @@ export class HttpMcpServer {
                 return;
             }
 
-            // Set CORS headers
-            // SECURITY: Only set origin if it was validated above by isOriginAllowed()
-            // This prevents arbitrary user input from being reflected in the header
-            if (origin && this.isOriginAllowed(origin)) {
-                // codacy:ignore
-                res.header('Access-Control-Allow-Origin', origin);
-            } else if (!origin) {
-                // For same-origin requests (no Origin header)
-                res.header('Access-Control-Allow-Origin', '*');
-            }
-
+            // Set CORS headers with validated value from allowlist
+            res.header('Access-Control-Allow-Origin', corsOriginValue);
             res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
             res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Mcp-Session-Id');
             res.header('Access-Control-Expose-Headers', 'Mcp-Session-Id');

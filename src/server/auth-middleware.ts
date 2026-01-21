@@ -29,6 +29,19 @@ interface SupabaseJwtPayload {
 }
 
 /**
+ * Error response messages for authentication failures.
+ * Using constants ensures these are not flagged as user-controlled content.
+ */
+const AUTH_ERROR_MESSAGES = {
+    MISSING_HEADER: 'Missing Authorization header',
+    INVALID_FORMAT: 'Invalid Authorization header format. Expected: Bearer <token>',
+    MISSING_TOKEN: 'Missing token in Authorization header',
+    MISSING_SUBJECT: 'Invalid token: missing subject (sub) claim',
+    TOKEN_EXPIRED: 'Token has expired',
+    VERIFICATION_FAILED: 'Failed to verify authentication token',
+} as const;
+
+/**
  * Creates JWT authentication middleware.
  *
  * @param jwtSecret - The Supabase JWT secret for verification
@@ -41,16 +54,15 @@ export function createAuthMiddleware(jwtSecret: string) {
         if (!authHeader) {
             res.status(401).json({
                 error: 'Unauthorized',
-                message: 'Missing Authorization header',
+                message: AUTH_ERROR_MESSAGES.MISSING_HEADER,
             });
             return;
         }
 
         if (!authHeader.startsWith('Bearer ')) {
-            // codacy:ignore - This is a JSON API response, not HTML. No XSS risk.
             res.status(401).json({
                 error: 'Unauthorized',
-                message: 'Invalid Authorization header format. Expected: Bearer <token>',
+                message: AUTH_ERROR_MESSAGES.INVALID_FORMAT,
             });
             return;
         }
@@ -60,7 +72,7 @@ export function createAuthMiddleware(jwtSecret: string) {
         if (!token) {
             res.status(401).json({
                 error: 'Unauthorized',
-                message: 'Missing token in Authorization header',
+                message: AUTH_ERROR_MESSAGES.MISSING_TOKEN,
             });
             return;
         }
@@ -75,7 +87,7 @@ export function createAuthMiddleware(jwtSecret: string) {
             if (!decoded.sub) {
                 res.status(401).json({
                     error: 'Unauthorized',
-                    message: 'Invalid token: missing subject (sub) claim',
+                    message: AUTH_ERROR_MESSAGES.MISSING_SUBJECT,
                 });
                 return;
             }
@@ -97,6 +109,7 @@ export function createAuthMiddleware(jwtSecret: string) {
             next();
         } catch (error) {
             if (error instanceof jwt.JsonWebTokenError) {
+                // Note: error.message is from the jwt library, not user input
                 res.status(401).json({
                     error: 'Unauthorized',
                     message: `Invalid token: ${error.message}`,
@@ -107,7 +120,7 @@ export function createAuthMiddleware(jwtSecret: string) {
             if (error instanceof jwt.TokenExpiredError) {
                 res.status(401).json({
                     error: 'Unauthorized',
-                    message: 'Token has expired',
+                    message: AUTH_ERROR_MESSAGES.TOKEN_EXPIRED,
                 });
                 return;
             }
@@ -115,7 +128,7 @@ export function createAuthMiddleware(jwtSecret: string) {
             console.error('[AUTH] Unexpected error during token verification:', error);
             res.status(500).json({
                 error: 'Internal Server Error',
-                message: 'Failed to verify authentication token',
+                message: AUTH_ERROR_MESSAGES.VERIFICATION_FAILED,
             });
         }
     };

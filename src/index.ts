@@ -139,55 +139,56 @@ async function main() {
 
         console.error('Supabase client initialized successfully.');
 
-        const availableTools = {
-            // Cast here assumes tools will implement AppTool structure
-            [listTablesTool.name]: listTablesTool as AppTool,
-            [listExtensionsTool.name]: listExtensionsTool as AppTool,
-            [listMigrationsTool.name]: listMigrationsTool as AppTool,
-            [applyMigrationTool.name]: applyMigrationTool as AppTool,
-            [executeSqlTool.name]: executeSqlTool as AppTool,
-            [getDatabaseConnectionsTool.name]: getDatabaseConnectionsTool as AppTool,
-            [getDatabaseStatsTool.name]: getDatabaseStatsTool as AppTool,
-            [getProjectUrlTool.name]: getProjectUrlTool as AppTool,
-            [generateTypesTool.name]: generateTypesTool as AppTool,
-            [rebuildHooksTool.name]: rebuildHooksTool as AppTool,
-            [verifyJwtSecretTool.name]: verifyJwtSecretTool as AppTool,
-            [listAuthUsersTool.name]: listAuthUsersTool as AppTool,
-            [getAuthUserTool.name]: getAuthUserTool as AppTool,
-            [deleteAuthUserTool.name]: deleteAuthUserTool as AppTool,
-            [createAuthUserTool.name]: createAuthUserTool as AppTool,
-            [updateAuthUserTool.name]: updateAuthUserTool as AppTool,
-            [listStorageBucketsTool.name]: listStorageBucketsTool as AppTool,
-            [listStorageObjectsTool.name]: listStorageObjectsTool as AppTool,
-            [listRealtimePublicationsTool.name]: listRealtimePublicationsTool as AppTool,
-            [listCronJobsTool.name]: listCronJobsTool as AppTool,
-            [listVectorIndexesTool.name]: listVectorIndexesTool as AppTool,
-            [listEdgeFunctionsTool.name]: listEdgeFunctionsTool as AppTool,
-            [getEdgeFunctionDetailsTool.name]: getEdgeFunctionDetailsTool as AppTool,
-            [getLogsTool.name]: getLogsTool as AppTool,
-            [getAdvisorsTool.name]: getAdvisorsTool as AppTool,
-            [getStorageConfigTool.name]: getStorageConfigTool as AppTool,
-            [updateStorageConfigTool.name]: updateStorageConfigTool as AppTool,
-            [listTableColumnsTool.name]: listTableColumnsTool as AppTool,
-            [listIndexesTool.name]: listIndexesTool as AppTool,
-            [listConstraintsTool.name]: listConstraintsTool as AppTool,
-            [listForeignKeysTool.name]: listForeignKeysTool as AppTool,
-            [listRlsPoliciesTool.name]: listRlsPoliciesTool as AppTool,
-            [listTriggersTool.name]: listTriggersTool as AppTool,
-            [listDatabaseFunctionsTool.name]: listDatabaseFunctionsTool as AppTool,
-            [getFunctionDefinitionTool.name]: getFunctionDefinitionTool as AppTool,
-            [getTriggerDefinitionTool.name]: getTriggerDefinitionTool as AppTool,
-            [getRlsStatusTool.name]: getRlsStatusTool as AppTool,
-            [listAvailableExtensionsTool.name]: listAvailableExtensionsTool as AppTool,
-            [getCronJobHistoryTool.name]: getCronJobHistoryTool as AppTool,
-            [listEdgeFunctionLogsTool.name]: listEdgeFunctionLogsTool as AppTool,
-            [getIndexStatsTool.name]: getIndexStatsTool as AppTool,
-            [getVectorIndexStatsTool.name]: getVectorIndexStatsTool as AppTool,
-            [explainQueryTool.name]: explainQueryTool as AppTool,
-        };
+        // Use Map for tool registration to avoid object injection patterns
+        const availableTools = new Map<string, AppTool>([
+            [listTablesTool.name, listTablesTool as AppTool],
+            [listExtensionsTool.name, listExtensionsTool as AppTool],
+            [listMigrationsTool.name, listMigrationsTool as AppTool],
+            [applyMigrationTool.name, applyMigrationTool as AppTool],
+            [executeSqlTool.name, executeSqlTool as AppTool],
+            [getDatabaseConnectionsTool.name, getDatabaseConnectionsTool as AppTool],
+            [getDatabaseStatsTool.name, getDatabaseStatsTool as AppTool],
+            [getProjectUrlTool.name, getProjectUrlTool as AppTool],
+            [generateTypesTool.name, generateTypesTool as AppTool],
+            [rebuildHooksTool.name, rebuildHooksTool as AppTool],
+            [verifyJwtSecretTool.name, verifyJwtSecretTool as AppTool],
+            [listAuthUsersTool.name, listAuthUsersTool as AppTool],
+            [getAuthUserTool.name, getAuthUserTool as AppTool],
+            [deleteAuthUserTool.name, deleteAuthUserTool as AppTool],
+            [createAuthUserTool.name, createAuthUserTool as AppTool],
+            [updateAuthUserTool.name, updateAuthUserTool as AppTool],
+            [listStorageBucketsTool.name, listStorageBucketsTool as AppTool],
+            [listStorageObjectsTool.name, listStorageObjectsTool as AppTool],
+            [listRealtimePublicationsTool.name, listRealtimePublicationsTool as AppTool],
+            [listCronJobsTool.name, listCronJobsTool as AppTool],
+            [listVectorIndexesTool.name, listVectorIndexesTool as AppTool],
+            [listEdgeFunctionsTool.name, listEdgeFunctionsTool as AppTool],
+            [getEdgeFunctionDetailsTool.name, getEdgeFunctionDetailsTool as AppTool],
+            [getLogsTool.name, getLogsTool as AppTool],
+            [getAdvisorsTool.name, getAdvisorsTool as AppTool],
+            [getStorageConfigTool.name, getStorageConfigTool as AppTool],
+            [updateStorageConfigTool.name, updateStorageConfigTool as AppTool],
+            [listTableColumnsTool.name, listTableColumnsTool as AppTool],
+            [listIndexesTool.name, listIndexesTool as AppTool],
+            [listConstraintsTool.name, listConstraintsTool as AppTool],
+            [listForeignKeysTool.name, listForeignKeysTool as AppTool],
+            [listRlsPoliciesTool.name, listRlsPoliciesTool as AppTool],
+            [listTriggersTool.name, listTriggersTool as AppTool],
+            [listDatabaseFunctionsTool.name, listDatabaseFunctionsTool as AppTool],
+            [getFunctionDefinitionTool.name, getFunctionDefinitionTool as AppTool],
+            [getTriggerDefinitionTool.name, getTriggerDefinitionTool as AppTool],
+            [getRlsStatusTool.name, getRlsStatusTool as AppTool],
+            [listAvailableExtensionsTool.name, listAvailableExtensionsTool as AppTool],
+            [getCronJobHistoryTool.name, getCronJobHistoryTool as AppTool],
+            [listEdgeFunctionLogsTool.name, listEdgeFunctionLogsTool as AppTool],
+            [getIndexStatsTool.name, getIndexStatsTool as AppTool],
+            [getVectorIndexStatsTool.name, getVectorIndexStatsTool as AppTool],
+            [explainQueryTool.name, explainQueryTool as AppTool],
+        ]);
 
         // --- Tool Filtering Logic ---
-        let registeredTools: Record<string, AppTool> = { ...availableTools }; // Start with all tools
+        // Use Map for registered tools (copy from available tools initially)
+        let registeredTools = new Map<string, AppTool>(availableTools);
         const toolsConfigPath = options.toolsConfig as string | undefined;
         let enabledToolNames: Set<string> | null = null; // Use Set for efficient lookup
 
@@ -223,19 +224,20 @@ async function main() {
         if (enabledToolNames !== null) { // Check if we successfully got names from config
             console.error(`Whitelisting tools based on config: ${Array.from(enabledToolNames).join(', ')}`);
 
-            registeredTools = {}; // Reset and add only whitelisted tools
-            for (const toolName in availableTools) {
+            // Create new Map with only whitelisted tools
+            registeredTools = new Map<string, AppTool>();
+            for (const [toolName, tool] of availableTools) {
                 if (enabledToolNames.has(toolName)) {
-                    registeredTools[toolName] = availableTools[toolName];
+                    registeredTools.set(toolName, tool);
                 } else {
                     console.error(`Tool ${toolName} disabled (not in config whitelist).`);
                 }
             }
 
             // Check if any tools specified in the config were not found in availableTools
-            // Use Object.hasOwn to prevent prototype pollution / object injection attacks
+            // Map.has() is safe from prototype pollution
             for (const requestedName of enabledToolNames) {
-                if (!Object.hasOwn(availableTools, requestedName)) {
+                if (!availableTools.has(requestedName)) {
                     console.warn(`Warning: Tool "${requestedName}" specified in config file not found.`);
                 }
             }
@@ -247,8 +249,8 @@ async function main() {
 
         // Prepare capabilities for the Server constructor
         const capabilitiesTools: Record<string, McpToolSchema> = {};
-        // Use the potentially filtered 'registeredTools' map
-        for (const tool of Object.values(registeredTools)) {
+        // Use the potentially filtered 'registeredTools' map (using Map.values())
+        for (const tool of registeredTools.values()) {
             capabilitiesTools[tool.name] = {
                 name: tool.name,
                 description: tool.description || 'Tool description missing',
@@ -280,20 +282,17 @@ async function main() {
             server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 const toolName = request.params.name;
 
-                // SECURITY: Use Object.hasOwn to prevent prototype pollution / object injection
-                // Look up the tool in the filtered 'registeredTools' map
-                if (!Object.hasOwn(registeredTools, toolName)) {
+                // Look up the tool in the filtered 'registeredTools' Map
+                // Map.has() and Map.get() are safe from prototype pollution
+                const tool = registeredTools.get(toolName);
+                if (!tool) {
                     // Check if it existed originally but was filtered out
-                    if (Object.hasOwn(availableTools, toolName)) {
+                    if (availableTools.has(toolName)) {
                         throw new McpError(ErrorCode.MethodNotFound, `Tool "${toolName}" is available but not enabled by the current server configuration.`);
                     }
                     // If the tool wasn't in the original list either, it's unknown
                     throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
                 }
-
-                // Safe: Object.hasOwn check above validates toolName exists as own property
-                // codacy:ignore
-                const tool = registeredTools[toolName];
 
                 // SECURITY: Check privilege level in HTTP mode
                 // In stdio mode (no userContext), all tools are accessible (trusted local process)

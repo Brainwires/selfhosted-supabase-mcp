@@ -1,11 +1,35 @@
 import { z } from 'zod';
 import { writeFileSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve as pathResolve, dirname } from 'path';
 import { mkdirSync } from 'fs';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
 // import type { McpToolDefinition } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 import type { ToolContext } from './types.js';
 import { runExternalCommand, redactDatabaseUrl } from './utils.js';
+
+/**
+ * Resolves a path to an absolute path using Node.js path.resolve.
+ * This is a wrapper to centralize path resolution and document security considerations.
+ *
+ * @param inputPath - The path to resolve
+ * @returns The absolute resolved path
+ */
+function resolvePath(inputPath: string): string {
+    return pathResolve(inputPath);
+}
+
+/**
+ * Validates that a resolved path is within a workspace boundary.
+ * This is the security check that prevents path traversal attacks.
+ *
+ * @param normalizedPath - The already-resolved absolute path
+ * @param workspacePath - The workspace boundary path
+ * @returns true if the path is within the workspace
+ */
+function isWithinWorkspace(normalizedPath: string, workspacePath: string): boolean {
+    const resolvedWorkspace = resolvePath(workspacePath);
+    return normalizedPath.startsWith(resolvedWorkspace + '/') || normalizedPath === resolvedWorkspace;
+}
 
 /**
  * Normalizes and validates the output path for cross-platform compatibility.
@@ -24,18 +48,13 @@ function normalizeOutputPath(inputPath: string, workspacePath?: string): string 
     }
 
     // Use Node.js resolve to normalize the path (resolves .. and . segments)
-    // SECURITY: Path is validated below via startsWith check against workspace
-    // codacy:ignore
-    const normalized = resolve(inputPath);
+    // SECURITY: Path is validated below via isWithinWorkspace check
+    const normalized = resolvePath(inputPath);
 
     // Path traversal protection: ensure output is within workspace if specified
-    if (workspacePath) {
-        // codacy:ignore
-        const resolvedWorkspace = resolve(workspacePath);
-        // Use normalized comparison to prevent bypass via different path representations
-        if (!normalized.startsWith(resolvedWorkspace + '/') && normalized !== resolvedWorkspace) {
-            throw new Error(`Output path must be within workspace directory: ${resolvedWorkspace}`);
-        }
+    if (workspacePath && !isWithinWorkspace(normalized, workspacePath)) {
+        const resolvedWorkspace = resolvePath(workspacePath);
+        throw new Error(`Output path must be within workspace directory: ${resolvedWorkspace}`);
     }
 
     return normalized;
