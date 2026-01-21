@@ -20,7 +20,9 @@ function sanitizeSchemaName(schema: string): string {
     // Also allow hyphens as they're sometimes used
     const validPattern = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
     if (!validPattern.test(schema)) {
-        throw new Error(`Invalid schema name "${schema}": must start with a letter or underscore and contain only alphanumeric characters, underscores, or hyphens`);
+        // Sanitize the schema name in error message to prevent log injection
+        const sanitizedForDisplay = schema.slice(0, 50).replace(/[^\w-]/g, '?');
+        throw new Error(`Invalid schema name "${sanitizedForDisplay}": must start with a letter or underscore and contain only alphanumeric characters, underscores, or hyphens`);
     }
     return schema;
 }
@@ -38,8 +40,9 @@ const pathUtils = {
      * which ensures output stays within the configured workspace directory.
      */
     toAbsolute(pathString: string): string {
-        // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal
-        return nodePath.resolve(pathString);
+        // Sanitize path: remove null bytes and normalize path separators
+        const sanitized = pathString.replace(/\0/g, '').replace(/\\/g, '/');
+        return nodePath.resolve(sanitized);
     },
 
     /**
