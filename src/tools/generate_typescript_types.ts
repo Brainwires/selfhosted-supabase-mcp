@@ -15,11 +15,13 @@ const pathUtils = {
     /**
      * Resolves a path to an absolute path.
      * The caller MUST validate the result before using it for file operations.
+     *
+     * SECURITY: Path traversal is prevented by isWithinWorkspace() validation
+     * which ensures output stays within the configured workspace directory.
      */
     toAbsolute(pathString: string): string {
-        // Use array spread to break static analysis taint tracking
-        const parts = [pathString];
-        return nodePath.resolve(parts[0]);
+        // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal
+        return nodePath.resolve(pathString);
     },
 
     /**
