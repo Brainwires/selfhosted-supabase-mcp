@@ -29,11 +29,11 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
         -   [x] `execute_sql`
         -   [x] `get_database_connections`
         -   [x] `get_database_stats`
-    -   [x] **Project Configuration & Keys**
+    -   [x] **Project Configuration**
         -   [x] `get_project_url`
-        -   [x] `get_anon_key`
-        -   [x] `get_service_key`
         -   [x] `verify_jwt_secret`
+        -   [-] `get_anon_key` (Removed - security risk)
+        -   [-] `get_service_key` (Removed - security risk)
     -   [x] **Development & Extension Tools**
         -   [x] `generate_typescript_types`
         -   [x] `rebuild_hooks`

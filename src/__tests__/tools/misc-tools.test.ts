@@ -3,8 +3,6 @@
  *
  * Tools tested:
  * - get_project_url
- * - get_anon_key
- * - get_service_key
  * - verify_jwt_secret
  * - generate_typescript_types
  * - list_realtime_publications
@@ -14,8 +12,6 @@
 
 import { describe, test, expect, mock } from 'bun:test';
 import { getProjectUrlTool } from '../../tools/get_project_url.js';
-import { getAnonKeyTool } from '../../tools/get_anon_key.js';
-import { getServiceKeyTool } from '../../tools/get_service_key.js';
 import { verifyJwtSecretTool } from '../../tools/verify_jwt_secret.js';
 import { generateTypesTool } from '../../tools/generate_typescript_types.js';
 import {
@@ -77,96 +73,6 @@ describe('getProjectUrlTool', () => {
                 project_url: 'not-a-url',
             });
             expect(result.success).toBe(false);
-        });
-    });
-});
-
-describe('getAnonKeyTool', () => {
-    describe('metadata', () => {
-        test('has correct name', () => {
-            expect(getAnonKeyTool.name).toBe('get_anon_key');
-        });
-
-        test('has description about anon key', () => {
-            expect(getAnonKeyTool.description.toLowerCase()).toContain('anon');
-        });
-    });
-
-    describe('execute', () => {
-        test('returns anon key', async () => {
-            const mockClient = createMockClient({ anonKey: 'test-anon-key-12345' });
-            const context = createMockContext(mockClient);
-
-            const result = await getAnonKeyTool.execute({}, context);
-
-            expect(result.anon_key).toBe('test-anon-key-12345');
-        });
-    });
-
-    describe('output validation', () => {
-        test('validates anon_key is string', () => {
-            const result = getAnonKeyTool.outputSchema.safeParse({ anon_key: 'key' });
-            expect(result.success).toBe(true);
-        });
-
-        test('rejects missing anon_key', () => {
-            const result = getAnonKeyTool.outputSchema.safeParse({});
-            expect(result.success).toBe(false);
-        });
-    });
-});
-
-describe('getServiceKeyTool', () => {
-    describe('metadata', () => {
-        test('has correct name', () => {
-            expect(getServiceKeyTool.name).toBe('get_service_key');
-        });
-
-        test('has description about service key', () => {
-            expect(getServiceKeyTool.description.toLowerCase()).toContain('service');
-        });
-    });
-
-    describe('execute', () => {
-        test('returns service role key when configured', async () => {
-            const mockClient = createMockClient({
-                serviceRoleKey: 'secret-service-key-12345',
-            });
-            const context = createMockContext(mockClient);
-
-            const result = await getServiceKeyTool.execute({}, context);
-
-            expect(result.service_key).toBe('secret-service-key-12345');
-            expect(result.service_key_status).toBe('found');
-        });
-
-        test('returns not_configured status when key is missing', async () => {
-            const mockClient = createMockClient({ serviceRoleKey: undefined });
-            // Override the getter to return undefined
-            mockClient.getServiceRoleKey = () => undefined;
-            const context = createMockContext(mockClient);
-
-            const result = await getServiceKeyTool.execute({}, context);
-
-            expect(result.service_key_status).toBe('not_configured');
-            expect(result.service_key).toBeUndefined();
-        });
-    });
-
-    describe('output validation', () => {
-        test('validates found status with key', () => {
-            const result = getServiceKeyTool.outputSchema.safeParse({
-                service_key_status: 'found',
-                service_key: 'key',
-            });
-            expect(result.success).toBe(true);
-        });
-
-        test('validates not_configured status', () => {
-            const result = getServiceKeyTool.outputSchema.safeParse({
-                service_key_status: 'not_configured',
-            });
-            expect(result.success).toBe(true);
         });
     });
 });

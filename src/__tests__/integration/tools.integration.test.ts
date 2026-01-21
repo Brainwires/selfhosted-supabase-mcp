@@ -20,7 +20,6 @@ import { listExtensionsTool } from '../../tools/list_extensions.js';
 import { getDatabaseConnectionsTool } from '../../tools/get_database_connections.js';
 import { executeSqlTool } from '../../tools/execute_sql.js';
 import { getProjectUrlTool } from '../../tools/get_project_url.js';
-import { getAnonKeyTool } from '../../tools/get_anon_key.js';
 import { verifyJwtSecretTool } from '../../tools/verify_jwt_secret.js';
 import { listStorageBucketsTool } from '../../tools/list_storage_buckets.js';
 
@@ -60,17 +59,11 @@ describe.skipIf(!hasCredentials)('Tools Integration Tests', () => {
             expect(result.project_url).toBe(process.env.SUPABASE_URL);
         });
 
-        test('get_anon_key returns configured key', async () => {
-            const result = await getAnonKeyTool.execute({}, context);
-            expect(result.anon_key).toBe(process.env.SUPABASE_ANON_KEY);
-        });
-
         test('verify_jwt_secret returns status', async () => {
             const result = await verifyJwtSecretTool.execute({}, context);
 
             if (process.env.JWT_SECRET) {
                 expect(result.jwt_secret_status).toBe('found');
-                expect(result.jwt_secret_preview).toBeDefined();
             } else {
                 expect(result.jwt_secret_status).toBe('not_configured');
             }

@@ -68,11 +68,11 @@ Based on analysis, the following tools are relevant for a self-hosted context:
     *   `get_database_stats` (Queries `pg_stat_*` views)
 *   **Development & Configuration:**
     *   `get_project_url` (Returns configured URL)
-    *   `get_anon_key` (Returns configured Anon Key)
-    *   `get_service_key` (Returns configured Service Role Key)
     *   `generate_typescript_types` (Relies on DB introspection, potentially wrap `supabase gen types` or use `pg-meta`)
     *   `rebuild_hooks` (Interacts with `pg_net` if database webhooks are used)
     *   `verify_jwt_secret` (Useful for Auth debugging)
+    *   ~~`get_anon_key`~~ (Removed - security risk: exposes sensitive keys via MCP)
+    *   ~~`get_service_key`~~ (Removed - security risk: exposes sensitive keys via MCP)
 *   **Edge Functions (If Enabled):**
     *   `list_edge_functions`
     *   `deploy_edge_function`

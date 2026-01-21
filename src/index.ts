@@ -17,8 +17,6 @@ import { executeSqlTool } from './tools/execute_sql.js';
 import { getDatabaseConnectionsTool } from './tools/get_database_connections.js';
 import { getDatabaseStatsTool } from './tools/get_database_stats.js';
 import { getProjectUrlTool } from './tools/get_project_url.js';
-import { getAnonKeyTool } from './tools/get_anon_key.js';
-import { getServiceKeyTool } from './tools/get_service_key.js';
 import { generateTypesTool } from './tools/generate_typescript_types.js';
 import { rebuildHooksTool } from './tools/rebuild_hooks.js';
 import { verifyJwtSecretTool } from './tools/verify_jwt_secret.js';
@@ -151,8 +149,6 @@ async function main() {
             [getDatabaseConnectionsTool.name]: getDatabaseConnectionsTool as AppTool,
             [getDatabaseStatsTool.name]: getDatabaseStatsTool as AppTool,
             [getProjectUrlTool.name]: getProjectUrlTool as AppTool,
-            [getAnonKeyTool.name]: getAnonKeyTool as AppTool,
-            [getServiceKeyTool.name]: getServiceKeyTool as AppTool,
             [generateTypesTool.name]: generateTypesTool as AppTool,
             [rebuildHooksTool.name]: rebuildHooksTool as AppTool,
             [verifyJwtSecretTool.name]: verifyJwtSecretTool as AppTool,
