@@ -25,11 +25,13 @@ function normalizeOutputPath(inputPath: string, workspacePath?: string): string 
 
     // Use Node.js resolve to normalize the path (resolves .. and . segments)
     // SECURITY: Path is validated below via startsWith check against workspace
-    const normalized = resolve(inputPath); // NOSONAR - path traversal protected below
+    // codacy:ignore
+    const normalized = resolve(inputPath);
 
     // Path traversal protection: ensure output is within workspace if specified
     if (workspacePath) {
-        const resolvedWorkspace = resolve(workspacePath); // NOSONAR - workspace is trusted server config
+        // codacy:ignore
+        const resolvedWorkspace = resolve(workspacePath);
         // Use normalized comparison to prevent bypass via different path representations
         if (!normalized.startsWith(resolvedWorkspace + '/') && normalized !== resolvedWorkspace) {
             throw new Error(`Output path must be within workspace directory: ${resolvedWorkspace}`);

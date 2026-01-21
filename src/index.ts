@@ -292,7 +292,8 @@ async function main() {
                 }
 
                 // Safe: Object.hasOwn check above validates toolName exists as own property
-                const tool = registeredTools[toolName]; // NOSONAR - validated via Object.hasOwn
+                // codacy:ignore
+                const tool = registeredTools[toolName];
 
                 // SECURITY: Check privilege level in HTTP mode
                 // In stdio mode (no userContext), all tools are accessible (trusted local process)

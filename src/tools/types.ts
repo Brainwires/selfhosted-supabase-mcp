@@ -48,8 +48,9 @@ export function canAccessTool(
     toolPrivilegeLevel: ToolPrivilegeLevel
 ): boolean {
     // SECURITY: Use Object.hasOwn to prevent prototype pollution / object injection
+    // codacy:ignore
     const allowedLevels = Object.hasOwn(ROLE_PRIVILEGE_MAP, userRole)
-        ? ROLE_PRIVILEGE_MAP[userRole] // NOSONAR - validated via Object.hasOwn above
+        ? ROLE_PRIVILEGE_MAP[userRole]
         : ROLE_PRIVILEGE_MAP.authenticated;
     return allowedLevels.has(toolPrivilegeLevel);
 }
