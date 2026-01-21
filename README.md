@@ -35,11 +35,9 @@ The server exposes the following tools to MCP clients:
     *   `execute_sql`: Executes an arbitrary SQL query (via RPC or direct connection).
     *   `get_database_connections`: Shows active database connections (`pg_stat_activity`).
     *   `get_database_stats`: Retrieves database statistics (`pg_stat_*`).
-*   **Project Configuration & Keys**
+*   **Project Configuration**
     *   `get_project_url`: Returns the configured Supabase URL.
-    *   `get_anon_key`: Returns the configured Supabase anon key.
-    *   `get_service_key`: Returns the configured Supabase service role key (if provided).
-    *   `verify_jwt_secret`: Checks if the JWT secret is configured and returns a preview.
+    *   `verify_jwt_secret`: Checks if the JWT secret is configured.
 *   **Development & Extension Tools**
     *   `generate_typescript_types`: Generates TypeScript types from the database schema.
     *   `rebuild_hooks`: Attempts to restart the `pg_net` worker (if used).
@@ -470,8 +468,7 @@ When deploying via Docker:
 1. The MCP server runs as a non-root user (`mcp:mcp`)
 2. JWT authentication is enforced for all tool calls
 3. Privileged tools (like `execute_sql`) require `service_role` JWT
-4. Sensitive tools (like `get_service_key`) are restricted to `service_role` only
-5. CORS is configured via Kong - adjust origins for your deployment
+4. CORS is configured via Kong - adjust origins for your deployment
 
 ## Development
 

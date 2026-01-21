@@ -7,9 +7,8 @@ type LogFunction = (message: string, level?: 'info' | 'warn' | 'error') => void;
  * Privilege levels for tools.
  * - 'regular': Safe read-only operations, can be called by any authenticated user
  * - 'privileged': Requires service_role key or direct DB connection, performs admin operations
- * - 'sensitive': Returns sensitive configuration data (keys, secrets) - use with caution
  */
-export type ToolPrivilegeLevel = 'regular' | 'privileged' | 'sensitive';
+export type ToolPrivilegeLevel = 'regular' | 'privileged';
 
 /**
  * User context from JWT authentication (HTTP mode only).
@@ -22,12 +21,12 @@ export interface UserContext {
 
 /**
  * Maps JWT roles to allowed tool privilege levels.
- * - 'service_role': Can access all tools including sensitive
+ * - 'service_role': Can access all tools (regular + privileged)
  * - 'authenticated': Can only access regular tools
  * - 'anon': Can only access regular tools (same as authenticated)
  */
 const ROLE_PRIVILEGE_MAP: Record<string, Set<ToolPrivilegeLevel>> = {
-    service_role: new Set<ToolPrivilegeLevel>(['regular', 'privileged', 'sensitive']),
+    service_role: new Set<ToolPrivilegeLevel>(['regular', 'privileged']),
     authenticated: new Set<ToolPrivilegeLevel>(['regular']),
     anon: new Set<ToolPrivilegeLevel>(['regular']),
 };
