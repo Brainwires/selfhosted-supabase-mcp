@@ -23,12 +23,17 @@ export interface UserContext {
  * Maps JWT roles to allowed tool privilege levels.
  * - 'service_role': Can access all tools (regular + privileged)
  * - 'authenticated': Can only access regular tools
- * - 'anon': Can only access regular tools (same as authenticated)
+ * - 'anon': No tool access (anonymous users should not access MCP tools directly)
+ *
+ * SECURITY NOTE: Anonymous users are blocked from MCP tool access because:
+ * 1. MCP tools provide admin-level database introspection
+ * 2. Anon JWTs are meant for public API access, not admin tooling
+ * 3. If anon access is needed, use authenticated role with appropriate RLS
  */
 const ROLE_PRIVILEGE_MAP: Record<string, Set<ToolPrivilegeLevel>> = {
     service_role: new Set<ToolPrivilegeLevel>(['regular', 'privileged']),
     authenticated: new Set<ToolPrivilegeLevel>(['regular']),
-    anon: new Set<ToolPrivilegeLevel>(['regular']),
+    anon: new Set<ToolPrivilegeLevel>([]), // No access for anonymous users
 };
 
 /**
@@ -42,7 +47,10 @@ export function canAccessTool(
     userRole: string,
     toolPrivilegeLevel: ToolPrivilegeLevel
 ): boolean {
-    const allowedLevels = ROLE_PRIVILEGE_MAP[userRole] ?? ROLE_PRIVILEGE_MAP.authenticated;
+    // SECURITY: Use Object.hasOwn to prevent prototype pollution / object injection
+    const allowedLevels = Object.hasOwn(ROLE_PRIVILEGE_MAP, userRole)
+        ? ROLE_PRIVILEGE_MAP[userRole]
+        : ROLE_PRIVILEGE_MAP.authenticated;
     return allowedLevels.has(toolPrivilegeLevel);
 }
 

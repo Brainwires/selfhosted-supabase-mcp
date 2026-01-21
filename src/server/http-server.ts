@@ -41,6 +41,8 @@ export class HttpMcpServer {
     private readonly options: HttpMcpServerOptions;
     private readonly mcpServerFactory: McpServerFactory;
     private requestCounts: Map<string, { count: number; resetTime: number }> = new Map();
+    private cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
+    private readonly CLEANUP_INTERVAL_MS = 60000; // Clean up expired entries every minute
 
     constructor(options: HttpMcpServerOptions, mcpServerFactory: McpServerFactory) {
         this.options = options;
@@ -49,34 +51,76 @@ export class HttpMcpServer {
 
         this.setupMiddleware();
         this.setupRoutes();
+
+        // Start periodic cleanup of expired rate limit entries to prevent memory leak
+        this.cleanupIntervalId = setInterval(
+            () => this.cleanupExpiredRateLimitEntries(),
+            this.CLEANUP_INTERVAL_MS
+        );
+    }
+
+    /**
+     * Cleans up expired rate limit entries to prevent unbounded memory growth.
+     * Called periodically by the cleanup interval.
+     */
+    private cleanupExpiredRateLimitEntries(): void {
+        const now = Date.now();
+        let cleanedCount = 0;
+        for (const [key, record] of this.requestCounts.entries()) {
+            if (now >= record.resetTime) {
+                this.requestCounts.delete(key);
+                cleanedCount++;
+            }
+        }
+        if (cleanedCount > 0) {
+            console.error(`[HTTP] Rate limiter cleanup: removed ${cleanedCount} expired entries`);
+        }
     }
 
     /**
      * Simple in-memory rate limiter.
-     * Returns true if request should be allowed, false if rate limited.
+     * Returns rate limit status and info for response headers.
      */
-    private checkRateLimit(clientKey: string): boolean {
+    private checkRateLimit(clientKey: string): {
+        allowed: boolean;
+        remaining: number;
+        resetTime: number;
+        limit: number;
+    } {
         const windowMs = this.options.rateLimitWindowMs ?? 60000; // 1 minute default
         const maxRequests = this.options.rateLimitMaxRequests ?? 100; // 100 requests default
         const now = Date.now();
 
-        const record = this.requestCounts.get(clientKey);
+        let record = this.requestCounts.get(clientKey);
 
         if (!record || now >= record.resetTime) {
             // Start new window
-            this.requestCounts.set(clientKey, {
-                count: 1,
-                resetTime: now + windowMs,
-            });
-            return true;
+            record = { count: 1, resetTime: now + windowMs };
+            this.requestCounts.set(clientKey, record);
+            return {
+                allowed: true,
+                remaining: maxRequests - 1,
+                resetTime: record.resetTime,
+                limit: maxRequests,
+            };
         }
 
         if (record.count >= maxRequests) {
-            return false;
+            return {
+                allowed: false,
+                remaining: 0,
+                resetTime: record.resetTime,
+                limit: maxRequests,
+            };
         }
 
         record.count++;
-        return true;
+        return {
+            allowed: true,
+            remaining: maxRequests - record.count,
+            resetTime: record.resetTime,
+            limit: maxRequests,
+        };
     }
 
     /**
@@ -173,14 +217,25 @@ export class HttpMcpServer {
         this.app.use((req, res, next) => {
             // Skip rate limiting for health checks
             if (req.path === '/health') {
-                return next();
+                next();
+                return;
             }
 
             const clientKey = this.getClientKey(req);
-            if (!this.checkRateLimit(clientKey)) {
+            const { allowed, remaining, resetTime, limit } = this.checkRateLimit(clientKey);
+
+            // Always add rate limit headers (standard practice)
+            res.header('X-RateLimit-Limit', String(limit));
+            res.header('X-RateLimit-Remaining', String(remaining));
+            res.header('X-RateLimit-Reset', String(Math.ceil(resetTime / 1000)));
+
+            if (!allowed) {
+                const retryAfterSeconds = Math.max(1, Math.ceil((resetTime - Date.now()) / 1000));
+                res.header('Retry-After', String(retryAfterSeconds));
                 res.status(429).json({
                     error: 'Too Many Requests',
                     message: 'Rate limit exceeded. Please try again later.',
+                    retryAfter: retryAfterSeconds,
                 });
                 return;
             }
@@ -205,9 +260,11 @@ export class HttpMcpServer {
             }
 
             // Set CORS headers
-            if (origin) {
+            // SECURITY: Only set origin if it was validated above by isOriginAllowed()
+            // This prevents arbitrary user input from being reflected in the header
+            if (origin && this.isOriginAllowed(origin)) {
                 res.header('Access-Control-Allow-Origin', origin);
-            } else {
+            } else if (!origin) {
                 // For same-origin requests (no Origin header)
                 res.header('Access-Control-Allow-Origin', '*');
             }
@@ -327,6 +384,12 @@ export class HttpMcpServer {
     }
 
     async stop(): Promise<void> {
+        // Clear rate limit cleanup interval to prevent memory leak
+        if (this.cleanupIntervalId) {
+            clearInterval(this.cleanupIntervalId);
+            this.cleanupIntervalId = null;
+        }
+
         return new Promise((resolve, reject) => {
             if (!this.httpServer) {
                 resolve();

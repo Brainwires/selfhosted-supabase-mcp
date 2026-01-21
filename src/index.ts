@@ -233,8 +233,9 @@ async function main() {
             }
 
             // Check if any tools specified in the config were not found in availableTools
+            // Use Object.hasOwn to prevent prototype pollution / object injection attacks
             for (const requestedName of enabledToolNames) {
-                if (!availableTools[requestedName]) {
+                if (!Object.hasOwn(availableTools, requestedName)) {
                     console.warn(`Warning: Tool "${requestedName}" specified in config file not found.`);
                 }
             }
@@ -248,17 +249,10 @@ async function main() {
         const capabilitiesTools: Record<string, McpToolSchema> = {};
         // Use the potentially filtered 'registeredTools' map
         for (const tool of Object.values(registeredTools)) {
-            // Directly use mcpInputSchema - assumes it exists and is correct
-            const staticInputSchema = tool.mcpInputSchema || { type: 'object', properties: {} };
-
-            if (!tool.mcpInputSchema) { // Simple check if it was actually provided
-                 console.error(`Tool ${tool.name} is missing mcpInputSchema. Using default empty schema.`);
-            }
-
             capabilitiesTools[tool.name] = {
                 name: tool.name,
                 description: tool.description || 'Tool description missing',
-                inputSchema: staticInputSchema,
+                inputSchema: tool.mcpInputSchema,
             };
         }
 
@@ -285,17 +279,19 @@ async function main() {
 
             server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 const toolName = request.params.name;
-                // Look up the tool in the filtered 'registeredTools' map
-                const tool = registeredTools[toolName as keyof typeof registeredTools];
 
-                if (!tool) {
+                // SECURITY: Use Object.hasOwn to prevent prototype pollution / object injection
+                // Look up the tool in the filtered 'registeredTools' map
+                if (!Object.hasOwn(registeredTools, toolName)) {
                     // Check if it existed originally but was filtered out
-                    if (availableTools[toolName as keyof typeof availableTools]) {
-                         throw new McpError(ErrorCode.MethodNotFound, `Tool "${toolName}" is available but not enabled by the current server configuration.`);
+                    if (Object.hasOwn(availableTools, toolName)) {
+                        throw new McpError(ErrorCode.MethodNotFound, `Tool "${toolName}" is available but not enabled by the current server configuration.`);
                     }
                     // If the tool wasn't in the original list either, it's unknown
                     throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
                 }
+
+                const tool = registeredTools[toolName];
 
                 // SECURITY: Check privilege level in HTTP mode
                 // In stdio mode (no userContext), all tools are accessible (trusted local process)
@@ -316,11 +312,10 @@ async function main() {
                         throw new Error(`Tool ${toolName} does not have an execute method.`);
                     }
 
-                    let parsedArgs: Record<string, unknown> | undefined = request.params.arguments as Record<string, unknown> | undefined;
-                    // Still use Zod schema for internal validation before execution
-                    if (tool.inputSchema && typeof tool.inputSchema.parse === 'function') {
-                        parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments) as Record<string, unknown>;
-                    }
+                    // Validate and parse arguments using Zod schema
+                    const parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(
+                        request.params.arguments
+                    ) as Record<string, unknown>;
 
                     // Create the context object using the imported type
                     const context: ToolContext = {
@@ -333,9 +328,8 @@ async function main() {
                         }
                     };
 
-                    // Call the tool's execute method
-                    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-                    const result = await tool.execute(parsedArgs as any, context);
+                    // Call the tool's execute method with validated arguments
+                    const result = await tool.execute(parsedArgs, context);
 
                     return {
                         content: [
@@ -390,19 +384,32 @@ async function main() {
             await httpServer.start();
 
             // Handle graceful shutdown
-            process.on('SIGINT', async () => {
-                console.error('Shutting down...');
-                await httpServer.stop();
-                process.exit(0);
+            // Use void to properly handle async handlers in process.on callbacks
+            process.on('SIGINT', () => {
+                void (async () => {
+                    console.error('Shutting down...');
+                    await httpServer.stop();
+                    process.exit(0);
+                })();
             });
 
-            process.on('SIGTERM', async () => {
-                console.error('Shutting down...');
-                await httpServer.stop();
-                process.exit(0);
+            process.on('SIGTERM', () => {
+                void (async () => {
+                    console.error('Shutting down...');
+                    await httpServer.stop();
+                    process.exit(0);
+                })();
             });
         } else {
+            // WARNING: Stdio mode has NO authentication - all tools accessible
             console.error('Starting MCP Server in stdio mode...');
+            console.error('');
+            console.error('================================================================================');
+            console.error('WARNING: Stdio mode has NO authentication. All tools (including privileged');
+            console.error('         tools) are accessible. Only use stdio mode with trusted local clients.');
+            console.error('         For remote access, use HTTP mode with JWT authentication.');
+            console.error('================================================================================');
+            console.error('');
             const server = createMcpServer();
             const stdioTransport = new StdioServerTransport();
             await server.connect(stdioTransport);

@@ -166,7 +166,7 @@ describe('utils', () => {
             const result = await executeSqlWithFallback(mockClient, 'SELECT 1');
 
             expect(result).toHaveProperty('error');
-            expect((result as any).error.code).toBe('MCP_CONFIG_ERROR');
+            expect((result as { error: { code: string } }).error.code).toBe('MCP_CONFIG_ERROR');
         });
     });
 
