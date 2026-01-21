@@ -8,6 +8,24 @@ import type { ToolContext } from './types.js';
 import { runExternalCommand, redactDatabaseUrl } from './utils.js';
 
 /**
+ * Sanitizes a schema name to prevent command injection.
+ * Only allows alphanumeric characters, underscores, and hyphens.
+ *
+ * @param schema - The schema name to sanitize
+ * @returns The sanitized schema name
+ * @throws Error if the schema name contains invalid characters
+ */
+function sanitizeSchemaName(schema: string): string {
+    // PostgreSQL identifiers: letters, digits, underscores (and $ but we exclude it for safety)
+    // Also allow hyphens as they're sometimes used
+    const validPattern = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
+    if (!validPattern.test(schema)) {
+        throw new Error(`Invalid schema name "${schema}": must start with a letter or underscore and contain only alphanumeric characters, underscores, or hyphens`);
+    }
+    return schema;
+}
+
+/**
  * Path utilities wrapped to satisfy static analysis.
  * These functions perform path resolution with security validation.
  */
@@ -135,8 +153,19 @@ export const generateTypesTool = {
         }
 
         // Construct the command
-        // Use --local flag for self-hosted?
-        const schemas = input.included_schemas.join(','); // Comma-separated for the CLI flag
+        // Sanitize schema names to prevent command injection
+        let sanitizedSchemas: string[];
+        try {
+            sanitizedSchemas = input.included_schemas.map(sanitizeSchemaName);
+        } catch (sanitizeError) {
+            const errorMessage = sanitizeError instanceof Error ? sanitizeError.message : String(sanitizeError);
+            return {
+                success: false,
+                message: errorMessage,
+                platform: process.platform,
+            };
+        }
+        const schemas = sanitizedSchemas.join(',');
         // Note: The actual command might vary slightly based on Supabase CLI version and context.
         // Using --db-url is generally safer for self-hosted.
         const command = `supabase gen types typescript --db-url "${dbUrl}" --schema "${schemas}"`;
