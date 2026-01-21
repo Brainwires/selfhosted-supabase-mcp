@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 
 // Input schema (none needed)
 const GetAnonKeyInputSchema = z.object({});
@@ -22,6 +22,7 @@ const mcpInputSchema = {
 export const getAnonKeyTool = {
     name: 'get_anon_key',
     description: 'Returns the configured Supabase anon key for this server.',
+    privilegeLevel: 'sensitive' as ToolPrivilegeLevel,
     inputSchema: GetAnonKeyInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: GetAnonKeyOutputSchema,
@@ -30,4 +31,4 @@ export const getAnonKeyTool = {
         const key = client.getAnonKey(); // Use getter from client
         return { anon_key: key };
     },
-}; 
+};

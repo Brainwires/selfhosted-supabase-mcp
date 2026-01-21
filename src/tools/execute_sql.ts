@@ -45,7 +45,18 @@ export const executeSqlTool = {
             );
         }
 
-        console.error(`Executing SQL (readOnly: ${input.read_only}): ${input.sql.substring(0, 100)}...`);
+        // AUDIT: Log SQL execution with user context
+        const userInfo = context.user
+            ? `user=${context.user.email || context.user.userId} role=${context.user.role}`
+            : 'user=unknown (stdio mode)';
+
+        // Log query for audit (truncate long queries)
+        const queryPreview = input.sql.length > 200
+            ? `${input.sql.substring(0, 200)}... [truncated, ${input.sql.length} chars total]`
+            : input.sql;
+
+        console.error(`[AUDIT] SQL execution by ${userInfo}: ${queryPreview}`);
+        context.log(`Executing SQL (readOnly: ${input.read_only})`, 'info');
 
         const result = await executeSqlWithFallback(client, input.sql, input.read_only);
         return handleSqlResponse(result, ExecuteSqlOutputSchema);

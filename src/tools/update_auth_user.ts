@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 
 import type { PoolClient } from 'pg';
 import type { AuthUser } from '../types/index.js'; // Import AuthUser
@@ -50,6 +50,7 @@ const mcpInputSchema = {
 export const updateAuthUserTool = {
     name: 'update_auth_user',
     description: 'Updates fields for a user in auth.users. WARNING: Password handling is insecure. Requires service_role key and direct DB connection.',
+    privilegeLevel: 'privileged' as ToolPrivilegeLevel,
     inputSchema: UpdateAuthUserInputSchema,
     mcpInputSchema: mcpInputSchema, // Ensure defined
     outputSchema: UpdatedAuthUserZodSchema,
@@ -75,7 +76,6 @@ export const updateAuthUserTool = {
         if (password !== undefined) {
             updates.push(`encrypted_password = crypt($${paramIndex++}, gen_salt('bf'))`);
             params.push(password);
-            console.warn(`SECURITY WARNING: Updating password for user ${user_id} with plain text password via direct DB update.`);
         }
         if (role !== undefined) {
             updates.push(`role = $${paramIndex++}`);

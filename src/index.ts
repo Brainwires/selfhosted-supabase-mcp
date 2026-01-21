@@ -29,7 +29,7 @@ import { createAuthUserTool } from './tools/create_auth_user.js';
 import { updateAuthUserTool } from './tools/update_auth_user.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { ToolContext } from './tools/types.js';
+import { canAccessTool, type ToolContext, type ToolPrivilegeLevel, type UserContext } from './tools/types.js';
 import listStorageBucketsTool from './tools/list_storage_buckets.js';
 import listStorageObjectsTool from './tools/list_storage_objects.js';
 import listRealtimePublicationsTool from './tools/list_realtime_publications.js';
@@ -77,6 +77,7 @@ interface AppTool {
     inputSchema: z.ZodTypeAny; // Zod schema for parsing
     mcpInputSchema: object;    // Static JSON schema for MCP (Required)
     outputSchema: z.ZodTypeAny; // Zod schema for output (optional)
+    privilegeLevel?: ToolPrivilegeLevel; // Privilege level for access control
     execute: (input: unknown, context: ToolContext) => Promise<unknown>;
 }
 
@@ -97,6 +98,10 @@ async function main() {
         .option('--transport <type>', 'Transport mode: stdio or http (default: stdio)', 'stdio')
         .option('--port <number>', 'HTTP server port (default: 3000)', '3000')
         .option('--host <string>', 'HTTP server host (default: 127.0.0.1)', '127.0.0.1')
+        .option('--cors-origins <origins>', 'Comma-separated list of allowed CORS origins (default: localhost only)')
+        .option('--rate-limit-window <ms>', 'Rate limit window in milliseconds (default: 60000)', '60000')
+        .option('--rate-limit-max <count>', 'Max requests per rate limit window (default: 100)', '100')
+        .option('--request-timeout <ms>', 'Request timeout in milliseconds (default: 30000)', '30000')
         .parse(process.argv);
 
     const options = program.opts();
@@ -265,11 +270,12 @@ async function main() {
 
         // Factory function to create a configured MCP server instance
         // This is needed for HTTP mode where each request may need a fresh server
-        const createMcpServer = (): Server => {
+        // In HTTP mode, userContext is provided for privilege-level enforcement
+        const createMcpServer = (userContext?: UserContext): Server => {
             const server = new Server(
                 {
                     name: 'self-hosted-supabase-mcp',
-                    version: '1.2.0',
+                    version: '1.3.0',
                 },
                 {
                     capabilities,
@@ -295,6 +301,20 @@ async function main() {
                     throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
                 }
 
+                // SECURITY: Check privilege level in HTTP mode
+                // In stdio mode (no userContext), all tools are accessible (trusted local process)
+                if (userContext) {
+                    const toolPrivilegeLevel = tool.privilegeLevel ?? 'regular';
+                    if (!canAccessTool(userContext.role, toolPrivilegeLevel)) {
+                        console.error(`[SECURITY] Access denied: User ${userContext.email || userContext.userId} (role: ${userContext.role}) attempted to access ${toolName} (requires: ${toolPrivilegeLevel})`);
+                        throw new McpError(
+                            ErrorCode.InvalidRequest,
+                            `Access denied: Tool '${toolName}' requires '${toolPrivilegeLevel}' privilege. ` +
+                            `Your role '${userContext.role}' does not have sufficient permissions.`
+                        );
+                    }
+                }
+
                 try {
                     if (typeof tool.execute !== 'function') {
                         throw new Error(`Tool ${toolName} does not have an execute method.`);
@@ -310,6 +330,7 @@ async function main() {
                     const context: ToolContext = {
                         selfhostedClient,
                         workspacePath: options.workspacePath as string,
+                        user: userContext, // Pass user context for audit logging
                         log: (message, level = 'info') => {
                             // Simple logger using console.error (consistent with existing logs)
                             console.error(`[${level.toUpperCase()}] ${message}`);
@@ -351,11 +372,21 @@ async function main() {
         // Start the appropriate transport
         if (transport === 'http') {
             console.error('Starting MCP Server in HTTP mode...');
+
+            // Parse CORS origins if provided
+            const corsOrigins = options.corsOrigins
+                ? (options.corsOrigins as string).split(',').map(o => o.trim()).filter(o => o.length > 0)
+                : undefined;
+
             const httpServer = new HttpMcpServer(
                 {
                     port: parseInt(options.port as string, 10),
                     host: options.host as string,
                     jwtSecret: options.jwtSecret as string,
+                    corsOrigins,
+                    rateLimitWindowMs: parseInt(options.rateLimitWindow as string, 10),
+                    rateLimitMaxRequests: parseInt(options.rateLimitMax as string, 10),
+                    requestTimeoutMs: parseInt(options.requestTimeout as string, 10),
                 },
                 createMcpServer
             );

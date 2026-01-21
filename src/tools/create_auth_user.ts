@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 import { handleSqlResponse } from './utils.js';
 import type { PoolClient } from 'pg';
 import type { SqlSuccessResponse, AuthUser } from '../types/index.js'; // Import AuthUser
@@ -45,6 +45,7 @@ const mcpInputSchema = {
 export const createAuthUserTool = {
     name: 'create_auth_user',
     description: 'Creates a new user directly in auth.users. WARNING: Requires plain password, insecure. Use with extreme caution.',
+    privilegeLevel: 'privileged' as ToolPrivilegeLevel,
     inputSchema: CreateAuthUserInputSchema,
     mcpInputSchema: mcpInputSchema, // Ensure defined above
     outputSchema: CreatedAuthUserZodSchema,
@@ -59,8 +60,7 @@ export const createAuthUserTool = {
             throw new Error('Direct database connection (DATABASE_URL) is required to create an auth user directly.');
         }
 
-        console.warn(`SECURITY WARNING: Creating user ${email} with plain text password via direct DB insert.`);
-        context.log(`Attempting to create user ${email}...`, 'warn');
+        context.log(`Creating user ${email}...`, 'info');
 
         // Use transaction to ensure atomicity and get pg client
         const createdUser = await client.executeTransactionWithPg(async (pgClient: PoolClient) => {

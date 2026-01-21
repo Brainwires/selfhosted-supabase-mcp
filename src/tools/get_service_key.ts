@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 
 // Input schema (none needed)
 const GetServiceKeyInputSchema = z.object({});
@@ -23,6 +23,7 @@ const mcpInputSchema = {
 export const getServiceKeyTool = {
     name: 'get_service_key',
     description: 'Returns the configured Supabase service role key for this server, if available.',
+    privilegeLevel: 'sensitive' as ToolPrivilegeLevel,
     inputSchema: GetServiceKeyInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: GetServiceKeyOutputSchema,

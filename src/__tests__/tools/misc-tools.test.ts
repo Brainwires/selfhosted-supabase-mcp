@@ -183,14 +183,15 @@ describe('verifyJwtSecretTool', () => {
     });
 
     describe('execute', () => {
-        test('returns found status with preview when JWT secret is configured', async () => {
+        test('returns found status when JWT secret is configured (no preview for security)', async () => {
             const mockClient = createMockClient({ jwtSecret: 'my-secret-jwt-key-12345' });
             const context = createMockContext(mockClient);
 
             const result = await verifyJwtSecretTool.execute({}, context);
 
             expect(result.jwt_secret_status).toBe('found');
-            expect(result.jwt_secret_preview).toBe('my-se...');
+            // SECURITY: jwt_secret_preview was removed to avoid leaking secret info
+            expect('jwt_secret_preview' in result).toBe(false);
         });
 
         test('returns not_configured status when JWT secret is missing', async () => {
@@ -201,17 +202,6 @@ describe('verifyJwtSecretTool', () => {
             const result = await verifyJwtSecretTool.execute({}, context);
 
             expect(result.jwt_secret_status).toBe('not_configured');
-            expect(result.jwt_secret_preview).toBeUndefined();
-        });
-
-        test('preview is limited to first 5 characters', async () => {
-            const mockClient = createMockClient({ jwtSecret: 'ab' }); // Short secret
-            mockClient.getJwtSecret = () => 'ab';
-            const context = createMockContext(mockClient);
-
-            const result = await verifyJwtSecretTool.execute({}, context);
-
-            expect(result.jwt_secret_preview).toBe('ab...');
         });
     });
 
@@ -219,7 +209,6 @@ describe('verifyJwtSecretTool', () => {
         test('validates found status', () => {
             const result = verifyJwtSecretTool.outputSchema.safeParse({
                 jwt_secret_status: 'found',
-                jwt_secret_preview: 'abc...',
             });
             expect(result.success).toBe(true);
         });
