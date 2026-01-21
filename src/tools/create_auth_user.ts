@@ -105,25 +105,30 @@ export const createAuthUserTool = {
                 return CreatedAuthUserZodSchema.parse(result.rows[0]);
             } catch (dbError: unknown) {
                 let errorMessage = 'Unknown database error during user creation';
-                let isUniqueViolation = false;
 
                 if (typeof dbError === 'object' && dbError !== null && 'code' in dbError) {
-                    // Check PG error code for unique violation safely
-                    if (dbError.code === '23505') {
-                        isUniqueViolation = true;
+                    // Safely extract code and message with proper type narrowing
+                    const errorCode = String((dbError as { code: unknown }).code);
+                    const errorMsg = 'message' in dbError && typeof (dbError as { message: unknown }).message === 'string'
+                        ? (dbError as { message: string }).message
+                        : undefined;
+
+                    // Check PG error code for unique violation
+                    if (errorCode === '23505') {
                         errorMessage = `User creation failed: Email '${email}' likely already exists.`;
-                    } else if ('message' in dbError && typeof dbError.message === 'string') {
-                         errorMessage = `Database error (${dbError.code}): ${dbError.message}`;
+                    } else if (errorMsg) {
+                        errorMessage = `Database error (${errorCode}): ${errorMsg}`;
                     } else {
-                        errorMessage = `Database error code: ${dbError.code}`;
+                        errorMessage = `Database error code: ${errorCode}`;
                     }
                 } else if (dbError instanceof Error) {
                     errorMessage = `Database error during user creation: ${dbError.message}`;
                 } else {
-                     errorMessage = `Database error during user creation: ${String(dbError)}`;
+                    errorMessage = `Database error during user creation: ${String(dbError)}`;
                 }
 
-                console.error('Error creating user in DB:', dbError); // Log the original error
+                // Log sanitized error (not full object to avoid leaking sensitive info)
+                console.error('Error creating user in DB:', errorMessage);
 
                 // Throw a specific error message
                 throw new Error(errorMessage);

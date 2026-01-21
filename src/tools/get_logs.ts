@@ -103,16 +103,20 @@ async function tryAnalyticsLogs(
         return null;
     }
 
-    // Map service to analytics table
-    const tableMap: Record<LogService, string> = {
-        postgres: 'postgres_logs',
-        auth: 'auth_logs',
-        storage: 'storage_logs',
-        realtime: 'realtime_logs',
-        postgrest: 'postgrest_logs',
-    };
+    // Map service to analytics table using Map to prevent object injection
+    const tableMap = new Map<LogService, string>([
+        ['postgres', 'postgres_logs'],
+        ['auth', 'auth_logs'],
+        ['storage', 'storage_logs'],
+        ['realtime', 'realtime_logs'],
+        ['postgrest', 'postgrest_logs'],
+    ]);
 
-    const tableName = tableMap[service];
+    const tableName = tableMap.get(service);
+    if (!tableName) {
+        context.log(`Unknown service: ${service}`, 'error');
+        return null;
+    }
 
     // Check if the specific logs table exists
     const checkTableSql = `
@@ -201,7 +205,7 @@ async function tryPostgresCsvLogs(
         return null;
     }
 
-    const logFile = logFileResult[0].logfile;
+    const logFile = String(logFileResult[0].logfile);
 
     // Check if we have a foreign table set up for logs, or try to query directly
     // This is a simplified approach - full implementation would need proper foreign table setup

@@ -264,7 +264,7 @@ export class SelfhostedSupabaseClient {
             const error = dbError instanceof Error ? dbError : new Error(String(dbError));
             console.error('Error executing SQL with pg:', error);
             // Try to extract code if possible (pg errors often have a .code property)
-            const code = (dbError as { code?: string })?.code || 'PG_ERROR';
+            const code = (dbError as { code?: string }).code || 'PG_ERROR';
             return { error: { message: error.message, code: code } };
         } finally {
             client?.release();

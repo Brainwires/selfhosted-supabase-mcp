@@ -5,20 +5,37 @@ import { mkdirSync } from 'fs';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
 // import type { McpToolDefinition } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 import type { ToolContext } from './types.js';
-import { runExternalCommand } from './utils.js'; // Need a new helper for running commands
+import { runExternalCommand, redactDatabaseUrl } from './utils.js';
 
 /**
- * Normalizes and validates the output path for cross-platform compatibility
+ * Normalizes and validates the output path for cross-platform compatibility.
+ * Includes path traversal protection when workspacePath is provided.
+ *
+ * @param inputPath - The user-provided path
+ * @param workspacePath - Optional workspace path to restrict output within
+ * @returns The normalized absolute path
+ * @throws Error if path traversal is detected or path is invalid
  */
-function normalizeOutputPath(inputPath: string): string {
+function normalizeOutputPath(inputPath: string, workspacePath?: string): string {
     // Handle Windows drive letters in Unix-style paths (e.g., "/c:/path" -> "C:/path")
     if (process.platform === 'win32' && inputPath.match(/^\/[a-zA-Z]:/)) {
         inputPath = inputPath.substring(1); // Remove leading slash
         inputPath = inputPath.charAt(0).toUpperCase() + inputPath.slice(1); // Uppercase drive letter
     }
-    
-    // Use Node.js resolve to normalize the path
-    return resolve(inputPath);
+
+    // Use Node.js resolve to normalize the path (resolves .. and . segments)
+    const normalized = resolve(inputPath);
+
+    // Path traversal protection: ensure output is within workspace if specified
+    if (workspacePath) {
+        const resolvedWorkspace = resolve(workspacePath);
+        // Use normalized comparison to prevent bypass via different path representations
+        if (!normalized.startsWith(resolvedWorkspace + '/') && normalized !== resolvedWorkspace) {
+            throw new Error(`Output path must be within workspace directory: ${resolvedWorkspace}`);
+        }
+    }
+
+    return normalized;
 }
 
 // Input schema
@@ -87,7 +104,8 @@ export const generateTypesTool = {
         // Using --db-url is generally safer for self-hosted.
         const command = `supabase gen types typescript --db-url "${dbUrl}" --schema "${schemas}"`;
 
-        console.error(`Running command: ${command}`);
+        // Log command with redacted credentials for security
+        console.error(`Running command: supabase gen types typescript --db-url "${redactDatabaseUrl(dbUrl)}" --schema "${schemas}"`);
 
         try {
             const { stdout, stderr, error } = await runExternalCommand(command);
@@ -107,9 +125,10 @@ export const generateTypesTool = {
             }
 
             // Normalize and save the generated types to the specified absolute path
+            // Path traversal protection: restrict to workspace directory if configured
             let outputPath: string;
             try {
-                outputPath = normalizeOutputPath(input.output_path);
+                outputPath = normalizeOutputPath(input.output_path, context.workspacePath);
                 console.error(`Normalized output path: ${outputPath}`);
             } catch (pathError) {
                 const pathErrorMessage = pathError instanceof Error ? pathError.message : String(pathError);

@@ -79,14 +79,8 @@ export function createAuthMiddleware(jwtSecret: string) {
                 return;
             }
 
-            // Check expiration (jwt.verify handles this, but be explicit)
-            if (decoded.exp && Date.now() >= decoded.exp * 1000) {
-                res.status(401).json({
-                    error: 'Unauthorized',
-                    message: 'Token has expired',
-                });
-                return;
-            }
+            // NOTE: Expiration is already checked by jwt.verify() above.
+            // It throws TokenExpiredError if expired, which is caught below.
 
             // Attach user info to request
             req.user = {

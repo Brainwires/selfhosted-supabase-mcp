@@ -73,6 +73,9 @@ export const updateAuthUserTool = {
             updates.push(`email = $${paramIndex++}`);
             params.push(email);
         }
+        // SECURITY NOTE: The `password !== undefined` check below is NOT a timing attack.
+        // We're only checking if the field was provided, not comparing password values.
+        // Actual password comparison happens in the database via bcrypt which is constant-time.
         if (password !== undefined) {
             updates.push(`encrypted_password = crypt($${paramIndex++}, gen_salt('bf'))`);
             params.push(password);
@@ -122,26 +125,32 @@ export const updateAuthUserTool = {
                 return UpdatedAuthUserZodSchema.parse(result.rows[0]);
             } catch (dbError: unknown) {
                 let errorMessage = 'Unknown database error during user update';
-                let isUniqueViolation = false;
 
                 // Check for potential email unique constraint violation if email was updated
                 if (typeof dbError === 'object' && dbError !== null && 'code' in dbError) {
-                    if (email !== undefined && dbError.code === '23505') {
-                        isUniqueViolation = true;
+                    // Safely extract code and message with proper type narrowing
+                    const errorCode = String((dbError as { code: unknown }).code);
+                    const errorMsg = 'message' in dbError && typeof (dbError as { message: unknown }).message === 'string'
+                        ? (dbError as { message: string }).message
+                        : undefined;
+
+                    // Check PG error code for unique violation
+                    if (email !== undefined && errorCode === '23505') {
                         errorMessage = `User update failed: Email '${email}' likely already exists for another user.`;
-                    } else if ('message' in dbError && typeof dbError.message === 'string') {
-                        errorMessage = `Database error (${dbError.code}): ${dbError.message}`;
+                    } else if (errorMsg) {
+                        errorMessage = `Database error (${errorCode}): ${errorMsg}`;
                     } else {
-                        errorMessage = `Database error code: ${dbError.code}`;
+                        errorMessage = `Database error code: ${errorCode}`;
                     }
                 } else if (dbError instanceof Error) {
-                     errorMessage = `Database error during user update: ${dbError.message}`;
+                    errorMessage = `Database error during user update: ${dbError.message}`;
                 } else {
-                     errorMessage = `Database error during user update: ${String(dbError)}`;
+                    errorMessage = `Database error during user update: ${String(dbError)}`;
                 }
 
-                console.error('Error updating user in DB:', dbError);
-                
+                // Log sanitized error (not full object to avoid leaking sensitive info)
+                console.error('Error updating user in DB:', errorMessage);
+
                 // Throw the specific error message
                 throw new Error(errorMessage);
             }

@@ -86,14 +86,18 @@ export const listConstraintsTool = {
             conditions.push(`rel.relname = '${table}'`);
         }
         if (constraint_type) {
-            const typeMap: Record<string, string> = {
-                'PRIMARY KEY': 'p',
-                'FOREIGN KEY': 'f',
-                'UNIQUE': 'u',
-                'CHECK': 'c',
-                'EXCLUDE': 'x',
-            };
-            conditions.push(`c.contype = '${typeMap[constraint_type]}'`);
+            // Use Map to prevent object injection attacks
+            const typeMap = new Map<string, string>([
+                ['PRIMARY KEY', 'p'],
+                ['FOREIGN KEY', 'f'],
+                ['UNIQUE', 'u'],
+                ['CHECK', 'c'],
+                ['EXCLUDE', 'x'],
+            ]);
+            const typeCode = typeMap.get(constraint_type);
+            if (typeCode) {
+                conditions.push(`c.contype = '${typeCode}'`);
+            }
         }
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

@@ -14,6 +14,7 @@ import { createAuthMiddleware, type AuthenticatedRequest } from '../../server/au
 import type { Response, NextFunction } from 'express';
 
 describe('createAuthMiddleware', () => {
+    // Test-only secret - NOT used in production. This is a fixture for unit testing JWT validation.
     const JWT_SECRET = 'test-jwt-secret-key-for-testing';
     const middleware = createAuthMiddleware(JWT_SECRET);
 
